@@ -1,0 +1,12 @@
+[Unit]
+Description=free5GC MCP Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/free5gc-mcp --config /etc/free5gc-mcp/config.yaml --addr :8080
+Restart=on-failure
+User=nobody
+
+[Install]
+WantedBy=multi-user.target

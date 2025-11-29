@@ -237,14 +237,11 @@ func (s *Server) HandleSSE(c *gin.Context) {
 	fmt.Fprintf(c.Writer, ": connected\n\n")
 	flusher.Flush()
 
-	notify := c.Writer.CloseNotify()
 	for {
 		select {
 		case <-ticker.C:
 			fmt.Fprintf(c.Writer, ": ping %d\n\n", time.Now().Unix())
 			flusher.Flush()
-		case <-notify:
-			return
 		case <-c.Request.Context().Done():
 			return
 		}

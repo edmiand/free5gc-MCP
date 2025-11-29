@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 
+	"github.com/Gthulhu/free5gc-MCP/pkg/tools/timeconv"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +28,7 @@ func createSubscriber(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
-	resp, err := client.CreateSubscriber(body)
+	resp, err := client.CreateSubscriber(bytes.NewReader(body))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -55,7 +57,7 @@ func updateSubscriber(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
-	resp, err := client.UpdateSubscriber(id, body)
+	resp, err := client.UpdateSubscriber(id, bytes.NewReader(body))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -88,4 +90,20 @@ func stopCore(c *gin.Context) {
 
 func coreStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "unknown", "detail": "not implemented"})
+}
+
+func convertTime(c *gin.Context) {
+	var req timeconv.Request
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload", "detail": err.Error()})
+		return
+	}
+
+	resp, err := timeconv.Convert(req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

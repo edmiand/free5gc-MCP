@@ -3,8 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/Gthulhu/free5gc-MCP/pkg/api/auth"
+	"github.com/Gthulhu/free5gc-MCP/pkg/auth"
 	"github.com/Gthulhu/free5gc-MCP/pkg/control"
+	"github.com/Gthulhu/free5gc-MCP/pkg/mcp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,6 +15,9 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 	client = c
 
 	r := gin.Default()
+	mcpServer := mcp.NewServer()
+	r.POST("/", mcpServer.HandleJSONRPC)
+	r.GET("/", mcpServer.HandleSSE)
 
 	// health
 	r.GET("/health", func(c *gin.Context) {
@@ -26,6 +30,8 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 		tools.Use(authCfg.Middleware())
 	}
 	{
+		tools.POST("/convert-time", convertTime)
+
 		subs := tools.Group("/subscribers")
 		{
 			subs.GET("", listSubscribers)

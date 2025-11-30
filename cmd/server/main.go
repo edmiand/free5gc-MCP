@@ -6,9 +6,9 @@ import (
 	"log"
 
 	"github.com/Gthulhu/free5gc-MCP/pkg/api"
+	"github.com/Gthulhu/free5gc-MCP/pkg/auth"
 	"github.com/Gthulhu/free5gc-MCP/pkg/config"
 	"github.com/Gthulhu/free5gc-MCP/pkg/control"
-	"github.com/Gthulhu/free5gc-MCP/pkg/api/auth"
 )
 
 func main() {
@@ -34,9 +34,9 @@ func main() {
 	// setup auth
 	// translate server config into auth config for API package
 	authCfg := &auth.AuthConfig{
-		Type: cfg.Server.APITokenType,
-		StaticToken: cfg.Server.APIToken,
-		JWTSecret: cfg.Server.JWTSecret,
+		Type:             cfg.Server.APITokenType,
+		StaticToken:      cfg.Server.APIToken,
+		JWTSecret:        cfg.Server.JWTSecret,
 		JWTPublicKeyPath: cfg.Server.JWTPublicKeyPath,
 	}
 	if err := authCfg.Load(); err != nil {

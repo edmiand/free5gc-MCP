@@ -46,9 +46,9 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 		{
 			subs.GET("", listSubscribers)
 			subs.POST("", createSubscriber)
-				subs.GET("/:id", getSubscriber)
-				subs.PUT("/:id", updateSubscriber)
-				subs.DELETE("/:id", deleteSubscriber)
+			subs.GET("/:id", getSubscriber)
+			subs.PUT("/:id", updateSubscriber)
+			subs.DELETE("/:id", deleteSubscriber)
 		}
 
 		core := tools.Group("/core")

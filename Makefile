@@ -5,11 +5,24 @@ BINARY=bin/free5gc-mcp
 build:
 	go build -o $(BINARY) ./cmd/server
 
+build-mock:
+	go build -o bin/mockwebui ./cmd/mockwebui
+
 docker:
 	docker build -t free5gc-mcp:latest .
 
 run:
 	$(BINARY) --config config/config.yaml --addr :8080
+
+run-mock:
+	go run ./cmd/mockwebui
+
+run-mcp-mock:
+	$(BINARY) --config config/mock-config.yaml --addr :8080
+
+.PHONY: test-mock
+test-mock:
+	bash scripts/test-mcp.sh
 
 install:
 	install -Dm755 $(BINARY) /usr/local/bin/free5gc-mcp

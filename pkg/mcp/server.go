@@ -9,15 +9,19 @@ import (
 
 	"github.com/q1317540161/free5gc-MCP/pkg/tools/timeconv"
 	"github.com/gin-gonic/gin"
+	"github.com/q1317540161/free5gc-MCP/pkg/control"
+	"io"
 )
 
 const protocolVersion = "2025-03-26"
 
 // Server exposes an MCP-compliant JSON-RPC handler on top of the existing REST API.
-type Server struct{}
+type Server struct{
+	client *control.Free5GCClient
+}
 
-func NewServer() *Server {
-	return &Server{}
+func NewServer(c *control.Free5GCClient) *Server {
+	return &Server{client: c}
 }
 
 type jsonRPCRequest struct {
@@ -163,6 +167,46 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"readOnlyHint": true,
 			},
 		},
+		{
+			"name":        "subscriber_list",
+			"description": "List subscribers from free5GC WebUI backend",
+			"inputSchema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
+		},
+		{
+			"name":        "subscriber_get",
+			"description": "Get a subscriber by ID",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{"id": map[string]string{"type": "string"}},
+				"required": []string{"id"},
+			},
+		},
+		{
+			"name":        "subscriber_create",
+			"description": "Create a subscriber (pass object as arguments)",
+			"inputSchema": map[string]interface{}{"type": "object"},
+		},
+		{
+			"name":        "subscriber_update",
+			"description": "Update a subscriber by ID",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"id":   map[string]string{"type": "string"},
+					"patch": map[string]interface{}{"type": "object"},
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			"name":        "subscriber_delete",
+			"description": "Delete a subscriber by ID",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{"id": map[string]string{"type": "string"}},
+				"required": []string{"id"},
+			},
+		},
 	}
 	return &jsonRPCResponse{
 		JSONRPC: "2.0",
@@ -183,6 +227,16 @@ func (s *Server) handleCallTool(req jsonRPCRequest) *jsonRPCResponse {
 	switch params.Name {
 	case "convert_time":
 		return s.callConvertTime(req.ID, params.Arguments)
+	case "subscriber_list":
+		return s.callSubscriberList(req.ID)
+	case "subscriber_get":
+		return s.callSubscriberGet(req.ID, params.Arguments)
+	case "subscriber_create":
+		return s.callSubscriberCreate(req.ID, params.Arguments)
+	case "subscriber_update":
+		return s.callSubscriberUpdate(req.ID, params.Arguments)
+	case "subscriber_delete":
+		return s.callSubscriberDelete(req.ID, params.Arguments)
 	default:
 		return s.errorResponse(req.ID, -32601, "unknown tool", params.Name)
 	}
@@ -216,6 +270,92 @@ func (s *Server) callConvertTime(id interface{}, args map[string]interface{}) *j
 			"content": []map[string]string{{"type": "text", "text": string(out)}},
 		},
 	}
+}
+
+func (s *Server) callSubscriberList(id interface{}) *jsonRPCResponse {
+	resp, err := s.client.ListSubscribers()
+	if err != nil {
+		return s.errorResponse(id, -32001, "backend error", err.Error())
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
+		"content": []map[string]string{{"type": "text", "text": string(b)}},
+		"status":  resp.Status,
+	}}
+}
+
+func (s *Server) callSubscriberGet(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	sid, _ := args["id"].(string)
+	if sid == "" {
+		return s.errorResponse(id, -32602, "missing id", nil)
+	}
+	resp, err := s.client.GetSubscriber(sid)
+	if err != nil {
+		return s.errorResponse(id, -32001, "backend error", err.Error())
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
+		"content": []map[string]string{{"type": "text", "text": string(b)}},
+		"status":  resp.Status,
+	}}
+}
+
+func (s *Server) callSubscriberCreate(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	payload, _ := json.Marshal(args)
+	resp, err := s.client.CreateSubscriber(bytes.NewReader(payload))
+	if err != nil {
+		return s.errorResponse(id, -32001, "backend error", err.Error())
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
+		"content": []map[string]string{{"type": "text", "text": string(b)}},
+		"status":  resp.Status,
+	}}
+}
+
+func (s *Server) callSubscriberUpdate(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	sid, _ := args["id"].(string)
+	if sid == "" {
+		return s.errorResponse(id, -32602, "missing id", nil)
+	}
+	// "patch" can be any object; default to full args if not provided
+	var patch map[string]interface{}
+	if p, ok := args["patch"].(map[string]interface{}); ok {
+		patch = p
+	} else {
+		patch = args
+	}
+	body, _ := json.Marshal(patch)
+	resp, err := s.client.UpdateSubscriber(sid, bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "backend error", err.Error())
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
+		"content": []map[string]string{{"type": "text", "text": string(b)}},
+		"status":  resp.Status,
+	}}
+}
+
+func (s *Server) callSubscriberDelete(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	sid, _ := args["id"].(string)
+	if sid == "" {
+		return s.errorResponse(id, -32602, "missing id", nil)
+	}
+	resp, err := s.client.DeleteSubscriber(sid)
+	if err != nil {
+		return s.errorResponse(id, -32001, "backend error", err.Error())
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
+		"content": []map[string]string{{"type": "text", "text": string(b)}},
+		"status":  resp.Status,
+	}}
 }
 
 func (s *Server) HandleSSE(c *gin.Context) {

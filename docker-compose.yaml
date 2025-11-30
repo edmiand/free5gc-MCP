@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: mongo
+    container_name: free5gc-test-mongo
+    environment:
+      - MONGO_INITDB_DATABASE=free5gc
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data_test:/data/db
+  webui:
+    container_name: webui
+    image: free5gc/webui
+    command: ./webui -c ./config/webuicfg.yaml
+    expose:
+      - "2121"
+    volumes:
+      - ./webui/webuicfg.yaml:/free5gc/config/webuicfg.yaml
+    environment:
+      - GIN_MODE=release
+    ports:
+      - "5000:5000"
+      - "2122:2122"
+      - "2121:2121"
+    depends_on:
+      - db
+  # mcp:
+  #   container_name: free5gc-mcp
+  #   build: .
+  #   image: free5gc-mcp:latest
+  #   command: ["--config", "/etc/free5gc-mcp/config.yaml", "--addr", ":8080"]
+  #   volumes:
+  #     - ./config/docker-config.yaml:/etc/free5gc-mcp/config.yaml:ro
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - webui
+  #     - db
+  #   restart: on-failure
+      
+volumes:
+  mongo_data_test:
+

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Gthulhu/free5gc-MCP/pkg/api"
-	"github.com/Gthulhu/free5gc-MCP/pkg/auth"
-	"github.com/Gthulhu/free5gc-MCP/pkg/config"
-	"github.com/Gthulhu/free5gc-MCP/pkg/control"
+	"github.com/q1317540161/free5gc-MCP/pkg/api"
+	"github.com/q1317540161/free5gc-MCP/pkg/auth"
+	"github.com/q1317540161/free5gc-MCP/pkg/config"
+	"github.com/q1317540161/free5gc-MCP/pkg/control"
 )
 
 func main() {

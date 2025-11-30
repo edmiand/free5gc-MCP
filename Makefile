@@ -17,3 +17,14 @@ install:
 	install -Dm644 config/config.yaml /etc/free5gc-mcp/config.yaml
 	systemctl daemon-reload
 	systemctl enable --now free5gc-mcp
+
+.PHONY: test-up test-down test-logs
+
+test-up:
+	docker compose -f docker-compose.yaml up -d --build
+
+test-down:
+	docker compose -f docker-compose.yaml down -v
+
+test-logs:
+	docker compose -f docker-compose.yaml logs -f

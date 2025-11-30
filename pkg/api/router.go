@@ -39,7 +39,7 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 	if authCfg != nil && authCfg.IsEnabled() {
 		tools.Use(authCfg.Middleware())
 	}
-		{
+	{
 		tools.POST("/convert-time", convertTime)
 
 		subs := tools.Group("/subscribers")

@@ -10,6 +10,9 @@ It exposes a REST Tools Provider that fronts the free5GC WebUI backend so an MCP
 ## Quick start (bare metal)
 
 ```bash
+//to run the web server + mongodb
+make test-up
+
 cd free5gc-MCP
 make build
 ./bin/free5gc-mcp --config config/config.yaml

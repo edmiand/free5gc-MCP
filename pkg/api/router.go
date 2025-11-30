@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/Gthulhu/free5gc-MCP/pkg/auth"
-	"github.com/Gthulhu/free5gc-MCP/pkg/control"
-	"github.com/Gthulhu/free5gc-MCP/pkg/mcp"
+	"github.com/q1317540161/free5gc-MCP/pkg/auth"
+	"github.com/q1317540161/free5gc-MCP/pkg/control"
+	// "github.com/q1317540161/free5gc-MCP/pkg/mcp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -25,6 +25,10 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 	})
 
 	tools := r.Group("/tools")
+	tools.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
+	})
+	
 	// apply auth middleware if configured
 	if authCfg != nil && authCfg.IsEnabled() {
 		tools.Use(authCfg.Middleware())

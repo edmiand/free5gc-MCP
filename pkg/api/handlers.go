@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/Gthulhu/free5gc-MCP/pkg/tools/timeconv"
+	"github.com/q1317540161/free5gc-MCP/pkg/tools/timeconv"
 	"github.com/gin-gonic/gin"
 )
 

@@ -1,4 +1,4 @@
-module github.com/Gthulhu/free5gc-MCP
+module github.com/q1317540161/free5gc-MCP
 
 go 1.20
 

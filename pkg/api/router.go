@@ -5,7 +5,7 @@ import (
 
 	"github.com/q1317540161/free5gc-MCP/pkg/auth"
 	"github.com/q1317540161/free5gc-MCP/pkg/control"
-	// "github.com/q1317540161/free5gc-MCP/pkg/mcp"
+	"github.com/q1317540161/free5gc-MCP/pkg/mcp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,9 +15,15 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 	client = c
 
 	r := gin.Default()
-	mcpServer := mcp.NewServer()
-	r.POST("/", mcpServer.HandleJSONRPC)
-	r.GET("/", mcpServer.HandleSSE)
+	mcpServer := mcp.NewServer(c)
+	// Protect MCP root with auth if configured
+	if authCfg != nil && authCfg.IsEnabled() {
+		r.POST("/", authCfg.Middleware(), mcpServer.HandleJSONRPC)
+		r.GET("/", authCfg.Middleware(), mcpServer.HandleSSE)
+	} else {
+		r.POST("/", mcpServer.HandleJSONRPC)
+		r.GET("/", mcpServer.HandleSSE)
+	}
 
 	// health
 	r.GET("/health", func(c *gin.Context) {
@@ -40,9 +46,9 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 		{
 			subs.GET("", listSubscribers)
 			subs.POST("", createSubscriber)
-			subs.GET(":id", getSubscriber)
-			subs.PUT(":id", updateSubscriber)
-			subs.DELETE(":id", deleteSubscriber)
+			subs.GET("/:id", getSubscriber)
+			subs.PUT("/:id", updateSubscriber)
+			subs.DELETE("/:id", deleteSubscriber)
 		}
 
 		core := tools.Group("/core")

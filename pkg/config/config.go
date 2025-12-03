@@ -16,7 +16,8 @@ type ServerConfig struct {
 
 type Free5GCConfig struct {
 	BaseURL         string `yaml:"webui_base_url"`
-	Token           string `yaml:"token"`
+	Username        string `yaml:"username"`
+	Password        string `yaml:"password"`
 	SubscribersPath string `yaml:"subscribers_path"`
 }
 

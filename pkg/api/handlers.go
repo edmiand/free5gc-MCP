@@ -1,75 +1,17 @@
 package api
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 
-	"github.com/q1317540161/free5gc-MCP/pkg/tools/timeconv"
 	"github.com/gin-gonic/gin"
 )
 
-// These handlers forward subscriber operations to the configured free5GC WebUI backend
-
-func listSubscribers(c *gin.Context) {
-	resp, err := client.ListSubscribers()
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
-}
-
-func createSubscriber(c *gin.Context) {
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
-		return
-	}
-	resp, err := client.CreateSubscriber(bytes.NewReader(body))
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
-}
-
-func getSubscriber(c *gin.Context) {
-	id := c.Param("id")
-	resp, err := client.GetSubscriber(id)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
-}
-
-func updateSubscriber(c *gin.Context) {
-	id := c.Param("id")
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
-		return
-	}
-	resp, err := client.UpdateSubscriber(id, bytes.NewReader(body))
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), b)
-}
-
-func deleteSubscriber(c *gin.Context) {
-	id := c.Param("id")
-	resp, err := client.DeleteSubscriber(id)
+// getTenantUsers handles GET /tools/tenant/:tenantId/user
+// Calls the webconsole backend to get all users for a tenant
+func getTenantUsers(c *gin.Context) {
+	tenantId := c.Param("tenantId")
+	resp, err := client.GetTenantUsers(tenantId)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -90,20 +32,4 @@ func stopCore(c *gin.Context) {
 
 func coreStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "unknown", "detail": "not implemented"})
-}
-
-func convertTime(c *gin.Context) {
-	var req timeconv.Request
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload", "detail": err.Error()})
-		return
-	}
-
-	resp, err := timeconv.Convert(req)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
 }

@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/q1317540161/free5gc-MCP/pkg/auth"
 	"github.com/q1317540161/free5gc-MCP/pkg/control"
 	"github.com/q1317540161/free5gc-MCP/pkg/mcp"
-	"github.com/gin-gonic/gin"
 )
 
 var client *control.Free5GCClient
@@ -16,7 +16,8 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 
 	r := gin.Default()
 	mcpServer := mcp.NewServer(c)
-	// Protect MCP root with auth if configured
+
+	// MCP JSON-RPC endpoint at root
 	if authCfg != nil && authCfg.IsEnabled() {
 		r.POST("/", authCfg.Middleware(), mcpServer.HandleJSONRPC)
 		r.GET("/", authCfg.Middleware(), mcpServer.HandleSSE)
@@ -25,7 +26,7 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 		r.GET("/", mcpServer.HandleSSE)
 	}
 
-	// health
+	// health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -34,22 +35,14 @@ func SetupRouter(c *control.Free5GCClient, authCfg *auth.AuthConfig) *gin.Engine
 	tools.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	
+
 	// apply auth middleware if configured
 	if authCfg != nil && authCfg.IsEnabled() {
 		tools.Use(authCfg.Middleware())
 	}
 	{
-		tools.POST("/convert-time", convertTime)
-
-		subs := tools.Group("/subscribers")
-		{
-			subs.GET("", listSubscribers)
-			subs.POST("", createSubscriber)
-			subs.GET("/:id", getSubscriber)
-			subs.PUT("/:id", updateSubscriber)
-			subs.DELETE("/:id", deleteSubscriber)
-		}
+		// Tenant users endpoint - GET /tools/tenant/:tenantId/user
+		tools.GET("/tenant/:tenantId/user", getTenantUsers)
 
 		core := tools.Group("/core")
 		{

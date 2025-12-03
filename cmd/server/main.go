@@ -29,7 +29,7 @@ func main() {
 
 	fmt.Printf("Starting free5GC MCP on %s\n", cfg.Server.Addr)
 
-	client := control.NewFree5GCClient(cfg.Free5GC.BaseURL, cfg.Free5GC.Token, cfg.Free5GC.SubscribersPath)
+	client := control.NewFree5GCClient(cfg.Free5GC.BaseURL, cfg.Free5GC.Username, cfg.Free5GC.Password)
 
 	// setup auth
 	// translate server config into auth config for API package

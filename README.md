@@ -1,129 +1,314 @@
-# free5GC MCP (Minimal Control Plane)
+# free5GC MCP (Model Context Protocol) Server
 
-This project is a scaffold for an MCP (Model Context Protocol) server implemented in Go.
-It exposes a REST Tools Provider that fronts the free5GC WebUI backend so an MCP client (for example a Copilot agent) can:
+This project is an MCP (Model Context Protocol) server implemented in Go that provides AI assistants (like GitHub Copilot) with tools to manage free5GC 5G core network subscribers and configurations.
 
-- proxy subscriber CRUD to the WebUI backend
-- expose simple health/status endpoints for MCP orchestration
-- enforce either static bearer tokens or JWT validation for inbound MCP calls
+## Features
 
-## Quick start (bare metal)
+- **Subscriber Management**: Full CRUD operations for 5G subscribers
+- **Tenant User Management**: Query users within tenants
+- **JWT Authentication**: Automatic authentication with free5GC webconsole
+- **VS Code Integration**: Works seamlessly with GitHub Copilot in VS Code
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Setting Up free5GC Backend](#setting-up-free5gc-backend)
+3. [Setting Up the MCP Server](#setting-up-the-mcp-server)
+4. [VS Code MCP Configuration](#vs-code-mcp-configuration)
+5. [Tool Summary](#tool-summary)
+6. [Configuration Reference](#configuration-reference)
+7. [Usage Examples](#usage-examples)
+
+---
+
+## Prerequisites
+
+- **Go**: Version 1.21 or later
+- **MongoDB**: Version 4.4 or later
+- **free5GC**: v3.4.x or compatible version
+- **VS Code**: With GitHub Copilot extension installed
+
+---
+
+## Setting Up free5GC Backend
+
+### Step 1: Install Dependencies
 
 ```bash
-//to run the web server + mongodb
+# Install Go (if not installed)
+wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+
+# Install MongoDB
+sudo apt-get install -y mongodb
+sudo systemctl start mongodb
+sudo systemctl enable mongodb
+
+# Verify MongoDB is running
+mongosh --eval "db.adminCommand('ping')"
+```
+
+### Step 2: Clone and Build free5GC
+
+```bash
+# Clone free5GC
+git clone --recursive -b v4.1.0 -j `nproc` https://github.com/free5gc/free5gc.git
+cd free5gc
+
+# Build all NFs
+make all
+
+# Build webconsole
+cd webconsole
+go build -o bin/webconsole ./server.go
+```
+
+### Step 3: Start free5GC Components
+
+```bash
+# Terminal 1: Start the webconsole (backend API server)
+cd free5gc/webconsole
+./bin/webconsole
+
+# The webconsole will be available at http://127.0.0.1:5000
+# Default login: admin / free5gc
+```
+
+### Step 4: Verify free5GC is Running
+
+```bash
+# Check webconsole health
+curl -s http://127.0.0.1:5000/api/health
+
+# Login to get a token (for manual testing)
+curl -s -X POST http://127.0.0.1:5000/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"free5gc"}'
+```
+
+---
+
+## Setting Up the MCP Server
+
+### Step 1: Build the MCP Server
+
+```bash
+cd free5gc-MCP
+
+# Build the binary
+make build
+
+# to run the web server + mongodb
 make test-up
 
-cd free5gc-MCP
-make build
+# Or clean previous artifacts
+make clean 
+```
+
+### Step 2: Configure the MCP Server
+
+Edit `config/config.yaml`:
+
+```yaml
+server:
+  addr: ":8080"
+
+free5gc:
+  webui_base_url: "http://127.0.0.1:5000"
+  username: "admin"
+  password: "free5gc"
+```
+
+### Step 3: Run the MCP Server
+
+```bash
+# Run in foreground
 ./bin/free5gc-mcp --config config/config.yaml
+
+# Or run in background
+nohup ./bin/free5gc-mcp --config config/config.yaml > mcp.log 2>&1 &
 ```
 
-Once running:
-
-- `GET /health` to check liveness
-- `GET /tools/subscribers` to mirror `free5gc/webconsole/backend` subscriber list
-- `POST /tools/subscribers` with a JSON payload to create a subscriber via the WebUI backend
-- `POST /tools/convert-time` to convert timestamps between time zones/formats
-
-### MCP JSON-RPC entrypoint
-
-GitHub Copilot (or any MCP-compliant host) connects to the root path `/` using JSON-RPC 2.0 (and keeps a GET `/` SSE stream alive for notifications). You can verify the handshake manually:
+### Step 4: Verify MCP Server is Running
 
 ```bash
+# Test MCP initialize handshake
 curl -s http://127.0.0.1:8080/ \
-	-H 'Content-Type: application/json' \
-	-d '{
-		"jsonrpc": "2.0",
-		"id": 1,
-		"method": "initialize",
-		"params": {
-			"protocolVersion": "2025-03-26",
-			"capabilities": {},
-			"clientInfo": {"name": "curl", "version": "0.1"}
-		}
-	}'
-```
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-03-26",
+      "capabilities": {},
+      "clientInfo": {"name": "curl", "version": "0.1"}
+    }
+  }'
 
-Call the new MCP tool without going through the REST helper:
-
-```bash
+# List available tools
 curl -s http://127.0.0.1:8080/ \
-	-H 'Content-Type: application/json' \
-	-d '{
-		"jsonrpc": "2.0",
-		"id": 2,
-		"method": "tools/call",
-		"params": {
-			"name": "convert_time",
-			"arguments": {
-				"time": "2025-11-29T01:00:00",
-				"from": "UTC",
-				"to": "Asia/Kuala_Lumpur"
-			}
-		}
-	}'
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }'
 ```
 
-Example request:
+---
 
-```bash
-curl -s http://127.0.0.1:8080/tools/convert-time \
-	-H 'Content-Type: application/json' \
-	-d '{
-		"time": "2025-11-29T01:00:00",
-		"from": "UTC",
-		"to": "Asia/Kuala_Lumpur"
-	}'
+## VS Code MCP Configuration
+
+To use this MCP server with GitHub Copilot in VS Code, create a configuration file:
+
+### Step 1: Create the MCP Configuration File
+
+Create or edit `~/.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "free5gc-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080"
+    }
+  }
+}
 ```
 
-## Configuration
+### Step 2: Reload VS Code
 
-The default config lives at `config/config.yaml` (a copy also exists at the repo root for convenience). Override values via flags or environment-specific files.
+After creating the configuration file:
+1. Restart VS Code or reload the window (`Ctrl+Shift+P` → `Developer: Reload Window`)
+2. The MCP server tools will now be available to GitHub Copilot
+
+### Step 3: Verify Connection
+
+In VS Code, open a Copilot chat and ask:
+- "List all free5GC subscribers"
+- "Get tenant users for tenant ID xxx"
+
+Copilot will automatically use the MCP tools to query the free5GC backend.
+
+---
+
+## Tool Summary
+
+The MCP server exposes the following tools to AI assistants:
+
+| Tool Name | API Endpoint | Method | Description |
+|-----------|--------------|--------|-------------|
+| `tenant_users_get` | `/api/tenant/:tenantId/user` | GET | Get all users for a specific tenant |
+| `subscriber_list` | `/api/subscriber` | GET | Get all subscribers from free5GC |
+| `subscriber_get` | `/api/subscriber/:ueId/:servingPlmnId` | GET | Get a specific subscriber by UE ID and PLMN ID |
+| `subscriber_create` | `/api/subscriber/:ueId/:servingPlmnId` | POST | Create a new subscriber |
+| `subscriber_create_multiple` | `/api/subscriber/:ueId/:servingPlmnId/:userNumber` | POST | Create multiple subscribers at once |
+| `subscriber_update` | `/api/subscriber/:ueId/:servingPlmnId` | PUT | Full replacement update of a subscriber |
+| `subscriber_patch` | `/api/subscriber/:ueId/:servingPlmnId` | PATCH | Partial update of a subscriber |
+| `subscriber_delete` | `/api/subscriber/:ueId/:servingPlmnId` | DELETE | Delete a specific subscriber |
+| `subscriber_delete_multiple` | `/api/subscriber` | DELETE | Delete multiple subscribers at once |
+
+---
+
+## Configuration Reference
+
+The configuration file `config/config.yaml` supports the following options:
 
 ### `server`
 
-- `addr`: listen address (default `:8080`).
-- `api_token_type`: `"static"` to require a fixed bearer, `"jwt"` to validate inbound JWTs, or empty to disable auth.
-- `api_token`: token MCP clients must send when `api_token_type` is `static`.
-- `jwt_secret` / `jwt_public_key_path`: HS256 secret or PEM-encoded RSA public key used when `api_token_type` is `jwt`.
+| Option | Description | Default |
+|--------|-------------|---------|
+| `addr` | Listen address for MCP server | `:8080` |
+| `api_token_type` | Auth type: `static`, `jwt`, or empty | (empty) |
+| `api_token` | Static bearer token (when `api_token_type` is `static`) | |
+| `jwt_secret` | HS256 secret for JWT validation | |
+| `jwt_public_key_path` | Path to RSA public key for JWT | |
 
 ### `free5gc`
 
-- `webui_base_url`: point this to your running `free5gc/webconsole/backend` instance (default `http://127.0.0.1:5000`).
-- `token`: bearer token sent from MCP to the WebUI backend if that backend enforces auth.
-- `subscribers_path`: relative path for subscriber CRUD (default `/api/subscribers`; set it to whatever the WebUI backend expects).
+| Option | Description | Default |
+|--------|-------------|---------|
+| `webui_base_url` | URL of free5GC webconsole backend | `http://127.0.0.1:5000` |
+| `username` | Webconsole login username | `admin` |
+| `password` | Webconsole login password | `free5gc` |
 
-### `infrastructure`
+---
 
-Today this is a placeholder map (e.g., `use_microk8s: false`). Future microk8s/Helm helpers will live under `pkg/infrastructure`.
+## Usage Examples
 
-## Bare metal workflow
+### Using curl to test MCP tools
 
-1. Start free5GC core + WebUI backend locally (see the `free5gc` repo scripts like `run.sh` and the `webconsole/backend`).
-2. Update `config/config.yaml` so `webui_base_url` references the WebUI backend (for example `http://127.0.0.1:5000`).
-3. Optionally set a static MCP token or JWT trust material.
-4. `make build && ./bin/free5gc-mcp --config config/config.yaml`.
-5. Call the MCP endpoints with the same subscriber payloads you would send to the WebUI backend.
+```bash
+# List all subscribers
+curl -s http://127.0.0.1:8080/ \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "subscriber_list",
+      "arguments": {}
+    }
+  }'
 
-## Notes / next steps
+# Get a specific subscriber
+curl -s http://127.0.0.1:8080/ \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "subscriber_get",
+      "arguments": {
+        "ueId": "imsi-208930000000001",
+        "servingPlmnId": "20893"
+      }
+    }
+  }'
+```
+
+### Using GitHub Copilot in VS Code
+
+Once the MCP server is configured and running, you can interact with it naturally through Copilot:
+
+- **"Show me all 5G subscribers"** → Uses `subscriber_list`
+- **"Create a new subscriber with IMSI 208930000000099"** → Uses `subscriber_create`
+- **"Delete subscriber imsi-208930000000001"** → Uses `subscriber_delete`
+- **"Get all users for tenant ID xxx"** → Uses `tenant_users_get`
+
+---
+
+## Quick Start (TL;DR)
+
+```bash
+# 1. Start MongoDB
+sudo systemctl start mongodb
+
+# 2. Start free5GC webconsole (in another terminal)
+cd free5gc/webconsole && ./bin/webconsole
+
+# 3. Build and run MCP server
+cd free5gc-MCP
+make build
+./bin/free5gc-mcp --config config/config.yaml
+
+# 4. Configure VS Code
+echo '{"servers":{"free5gc-mcp":{"type":"http","url":"http://127.0.0.1:8080"}}}' > ~/.vscode/mcp.json
+
+# 5. Reload VS Code and start using Copilot with free5GC tools!
+```
+
+---
+
+## Notes / Next Steps
 
 - Core start/stop/status handlers are stubs; wire them to `pkg/control` once the operational flow is defined.
 - `pkg/infrastructure/microk8s.go` is reserved for k8s automation when you containerize or move away from bare metal.
 - Docker and systemd unit files are provided for when you want long-running services.
-
-## Using this server with GitHub Copilot Agents
-
-1. **Build & run the MCP server**
-	- `make build`
-	- `./bin/free5gc-mcp --config config/config.yaml`
-	- Ensure the new `/tools/convert-time` endpoint is reachable (see curl example above).
-2. **Expose it to Copilot** (VS Code Insiders ≥ 1.93 with Copilot Agents enabled)
-	- Open the Command Palette → `GitHub Copilot: Manage MCP Servers` → `Add HTTP server`.
-	- Name it `free5gc-mcp`, set the base URL to `http://127.0.0.1:8080` (requires access to `/` for JSON-RPC and SSE).
-	- If you enabled MCP auth, add `Authorization: Bearer <token>` under headers.
-3. **Use the tool in chat**
-	- Open a Copilot chat session, pick the agent you want (e.g., `@workspace`).
-	- Ask: `@workspace convert 2025-11-29T01:00:00 UTC to Asia/Kuala_Lumpur using the free5gc time tool` (Copilot issues `tools/call` → `convert_time`).
-	- Copilot calls `/tools/convert-time` (and any other registered tool) and streams back the formatted results.
-
-You can declare additional tools by adding handlers in `pkg/api`, registering the route in `pkg/api/router.go`, and documenting them in this section so Copilot users know what payloads to send.

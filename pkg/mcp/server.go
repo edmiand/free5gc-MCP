@@ -4,19 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
-	"github.com/q1317540161/free5gc-MCP/pkg/tools/timeconv"
 	"github.com/gin-gonic/gin"
 	"github.com/q1317540161/free5gc-MCP/pkg/control"
-	"io"
 )
 
 const protocolVersion = "2025-03-26"
 
 // Server exposes an MCP-compliant JSON-RPC handler on top of the existing REST API.
-type Server struct{
+type Server struct {
 	client *control.Free5GCClient
 }
 
@@ -141,7 +140,7 @@ func (s *Server) handleInitialize(req jsonRPCRequest) *jsonRPCResponse {
 		"capabilities": map[string]interface{}{
 			"tools": map[string]bool{"listChanged": false},
 		},
-		"instructions": "Expose convert_time and free5GC helper tools. Use tools/call convert_time with RFC3339 timestamps.",
+		"instructions": "Expose free5GC subscriber and tenant management tools via MCP.",
 	}
 	return &jsonRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
 }
@@ -149,62 +148,175 @@ func (s *Server) handleInitialize(req jsonRPCRequest) *jsonRPCResponse {
 func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 	tools := []map[string]interface{}{
 		{
-			"name":        "convert_time",
-			"description": "Convert timestamps between time zones and formats",
+			"name":        "tenant_users_get",
+			"description": "Get all users for a tenant from free5GC WebUI. Calls GET /api/tenant/:tenantId/user on the webconsole backend.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"time":          map[string]string{"type": "string", "description": "Timestamp string"},
-					"from":          map[string]string{"type": "string", "description": "Source IANA timezone"},
-					"to":            map[string]string{"type": "string", "description": "Target IANA timezone"},
-					"layout":        map[string]string{"type": "string", "description": "Input Go layout (default RFC3339)"},
-					"output_layout": map[string]string{"type": "string", "description": "Output Go layout (default same as input)"},
+					"tenantId": map[string]string{
+						"type":        "string",
+						"description": "The tenant ID to retrieve users for",
+					},
 				},
-				"required": []string{"time"},
-			},
-			"annotations": map[string]interface{}{
-				"title":        "Convert Time",
-				"readOnlyHint": true,
+				"required": []string{"tenantId"},
 			},
 		},
+		// Subscriber Management Tools
 		{
 			"name":        "subscriber_list",
-			"description": "List subscribers from free5GC WebUI backend",
-			"inputSchema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
+			"description": "Get all subscribers from free5GC WebUI. Calls GET /api/subscriber on the webconsole backend.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
 		},
 		{
 			"name":        "subscriber_get",
-			"description": "Get a subscriber by ID",
+			"description": "Get a specific subscriber by UE ID and PLMN ID. Calls GET /api/subscriber/:ueId/:servingPlmnId on the webconsole backend.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
-				"properties": map[string]interface{}{"id": map[string]string{"type": "string"}},
-				"required": []string{"id"},
+				"properties": map[string]interface{}{
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+				},
+				"required": []string{"ueId", "servingPlmnId"},
 			},
 		},
 		{
 			"name":        "subscriber_create",
-			"description": "Create a subscriber (pass object as arguments)",
-			"inputSchema": map[string]interface{}{"type": "object"},
-		},
-		{
-			"name":        "subscriber_update",
-			"description": "Update a subscriber by ID",
+			"description": "Create a new subscriber. Calls POST /api/subscriber/:ueId/:servingPlmnId on the webconsole backend.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"id":   map[string]string{"type": "string"},
-					"patch": map[string]interface{}{"type": "object"},
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+					"subscriberData": map[string]interface{}{
+						"type":        "object",
+						"description": "The subscriber data object containing all subscriber configuration",
+					},
 				},
-				"required": []string{"id"},
+				"required": []string{"ueId", "servingPlmnId", "subscriberData"},
+			},
+		},
+		{
+			"name":        "subscriber_create_multiple",
+			"description": "Create multiple subscribers at once. Calls POST /api/subscriber/:ueId/:servingPlmnId/:userNumber on the webconsole backend.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The base UE ID (IMSI) of the first subscriber, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+					"userNumber": map[string]interface{}{
+						"type":        "integer",
+						"description": "The number of subscribers to create",
+					},
+					"subscriberData": map[string]interface{}{
+						"type":        "object",
+						"description": "The subscriber data template for all new subscribers",
+					},
+				},
+				"required": []string{"ueId", "servingPlmnId", "userNumber", "subscriberData"},
+			},
+		},
+		{
+			"name":        "subscriber_update",
+			"description": "Update a subscriber (full replacement). Calls PUT /api/subscriber/:ueId/:servingPlmnId on the webconsole backend.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+					"subscriberData": map[string]interface{}{
+						"type":        "object",
+						"description": "The complete subscriber data object to replace existing data",
+					},
+				},
+				"required": []string{"ueId", "servingPlmnId", "subscriberData"},
+			},
+		},
+		{
+			"name":        "subscriber_patch",
+			"description": "Partially update a subscriber. Calls PATCH /api/subscriber/:ueId/:servingPlmnId on the webconsole backend.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+					"patchData": map[string]interface{}{
+						"type":        "object",
+						"description": "The partial subscriber data to update (only fields to modify)",
+					},
+				},
+				"required": []string{"ueId", "servingPlmnId", "patchData"},
 			},
 		},
 		{
 			"name":        "subscriber_delete",
-			"description": "Delete a subscriber by ID",
+			"description": "Delete a specific subscriber. Calls DELETE /api/subscriber/:ueId/:servingPlmnId on the webconsole backend.",
 			"inputSchema": map[string]interface{}{
 				"type": "object",
-				"properties": map[string]interface{}{"id": map[string]string{"type": "string"}},
-				"required": []string{"id"},
+				"properties": map[string]interface{}{
+					"ueId": map[string]string{
+						"type":        "string",
+						"description": "The UE ID (IMSI) of the subscriber to delete, e.g., imsi-208930000000001",
+					},
+					"servingPlmnId": map[string]string{
+						"type":        "string",
+						"description": "The serving PLMN ID, e.g., 20893",
+					},
+				},
+				"required": []string{"ueId", "servingPlmnId"},
+			},
+		},
+		{
+			"name":        "subscriber_delete_multiple",
+			"description": "Delete multiple subscribers at once. Calls DELETE /api/subscriber on the webconsole backend with a list of subscribers.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"subscribers": map[string]interface{}{
+						"type":        "array",
+						"description": "Array of subscriber identifiers to delete, each with ueId and servingPlmnId",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"ueId":          map[string]string{"type": "string"},
+								"servingPlmnId": map[string]string{"type": "string"},
+							},
+						},
+					},
+				},
+				"required": []string{"subscribers"},
 			},
 		},
 	}
@@ -225,137 +337,341 @@ func (s *Server) handleCallTool(req jsonRPCRequest) *jsonRPCResponse {
 	}
 
 	switch params.Name {
-	case "convert_time":
-		return s.callConvertTime(req.ID, params.Arguments)
+	case "tenant_users_get":
+		return s.callTenantUsersGet(req.ID, params.Arguments)
 	case "subscriber_list":
 		return s.callSubscriberList(req.ID)
 	case "subscriber_get":
 		return s.callSubscriberGet(req.ID, params.Arguments)
 	case "subscriber_create":
 		return s.callSubscriberCreate(req.ID, params.Arguments)
+	case "subscriber_create_multiple":
+		return s.callSubscriberCreateMultiple(req.ID, params.Arguments)
 	case "subscriber_update":
 		return s.callSubscriberUpdate(req.ID, params.Arguments)
+	case "subscriber_patch":
+		return s.callSubscriberPatch(req.ID, params.Arguments)
 	case "subscriber_delete":
 		return s.callSubscriberDelete(req.ID, params.Arguments)
+	case "subscriber_delete_multiple":
+		return s.callSubscriberDeleteMultiple(req.ID, params.Arguments)
 	default:
 		return s.errorResponse(req.ID, -32601, "unknown tool", params.Name)
 	}
 }
 
-func (s *Server) callConvertTime(id interface{}, args map[string]interface{}) *jsonRPCResponse {
-	argBytes, err := json.Marshal(args)
+func (s *Server) callTenantUsersGet(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	tenantId, _ := args["tenantId"].(string)
+	if tenantId == "" {
+		return s.errorResponse(id, -32602, "missing tenantId parameter", nil)
+	}
+
+	resp, err := s.client.GetTenantUsers(tenantId)
 	if err != nil {
-		return s.errorResponse(id, -32602, "invalid arguments", err.Error())
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
-	var req timeconv.Request
-	if err := json.Unmarshal(argBytes, &req); err != nil {
-		return s.errorResponse(id, -32602, "invalid arguments", err.Error())
-	}
-	resp, err := timeconv.Convert(req)
-	if err != nil {
-		return &jsonRPCResponse{
-			JSONRPC: "2.0",
-			ID:      id,
-			Result: map[string]interface{}{
-				"content": []map[string]string{{"type": "text", "text": fmt.Sprintf("convert_time error: %v", err)}},
-				"isError": true,
-			},
-		}
-	}
-	out, _ := json.Marshal(resp)
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
 	return &jsonRPCResponse{
 		JSONRPC: "2.0",
 		ID:      id,
 		Result: map[string]interface{}{
-			"content": []map[string]string{{"type": "text", "text": string(out)}},
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
 		},
 	}
 }
 
 func (s *Server) callSubscriberList(id interface{}) *jsonRPCResponse {
-	resp, err := s.client.ListSubscribers()
+	resp, err := s.client.GetSubscribers()
 	if err != nil {
-		return s.errorResponse(id, -32001, "backend error", err.Error())
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
 	defer resp.Body.Close()
+
 	b, _ := io.ReadAll(resp.Body)
-	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
-		"content": []map[string]string{{"type": "text", "text": string(b)}},
-		"status":  resp.Status,
-	}}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
 }
 
 func (s *Server) callSubscriberGet(id interface{}, args map[string]interface{}) *jsonRPCResponse {
-	sid, _ := args["id"].(string)
-	if sid == "" {
-		return s.errorResponse(id, -32602, "missing id", nil)
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
 	}
-	resp, err := s.client.GetSubscriber(sid)
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
+	}
+
+	resp, err := s.client.GetSubscriberByID(ueId, servingPlmnId)
 	if err != nil {
-		return s.errorResponse(id, -32001, "backend error", err.Error())
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
 	defer resp.Body.Close()
+
 	b, _ := io.ReadAll(resp.Body)
-	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
-		"content": []map[string]string{{"type": "text", "text": string(b)}},
-		"status":  resp.Status,
-	}}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
 }
 
 func (s *Server) callSubscriberCreate(id interface{}, args map[string]interface{}) *jsonRPCResponse {
-	payload, _ := json.Marshal(args)
-	resp, err := s.client.CreateSubscriber(bytes.NewReader(payload))
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+	subscriberData, _ := args["subscriberData"].(map[string]interface{})
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
+	}
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
+	}
+	if subscriberData == nil {
+		return s.errorResponse(id, -32602, "missing subscriberData parameter", nil)
+	}
+
+	body, err := json.Marshal(subscriberData)
 	if err != nil {
-		return s.errorResponse(id, -32001, "backend error", err.Error())
+		return s.errorResponse(id, -32602, "failed to marshal subscriberData", err.Error())
+	}
+
+	resp, err := s.client.CreateSubscriber(ueId, servingPlmnId, bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
 	defer resp.Body.Close()
+
 	b, _ := io.ReadAll(resp.Body)
-	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
-		"content": []map[string]string{{"type": "text", "text": string(b)}},
-		"status":  resp.Status,
-	}}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
+}
+
+func (s *Server) callSubscriberCreateMultiple(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+	userNumberFloat, _ := args["userNumber"].(float64)
+	userNumber := int(userNumberFloat)
+	subscriberData, _ := args["subscriberData"].(map[string]interface{})
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
+	}
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
+	}
+	if userNumber <= 0 {
+		return s.errorResponse(id, -32602, "userNumber must be a positive integer", nil)
+	}
+	if subscriberData == nil {
+		return s.errorResponse(id, -32602, "missing subscriberData parameter", nil)
+	}
+
+	body, err := json.Marshal(subscriberData)
+	if err != nil {
+		return s.errorResponse(id, -32602, "failed to marshal subscriberData", err.Error())
+	}
+
+	resp, err := s.client.CreateMultipleSubscribers(ueId, servingPlmnId, userNumber, bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
 }
 
 func (s *Server) callSubscriberUpdate(id interface{}, args map[string]interface{}) *jsonRPCResponse {
-	sid, _ := args["id"].(string)
-	if sid == "" {
-		return s.errorResponse(id, -32602, "missing id", nil)
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+	subscriberData, _ := args["subscriberData"].(map[string]interface{})
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
 	}
-	// "patch" can be any object; default to full args if not provided
-	var patch map[string]interface{}
-	if p, ok := args["patch"].(map[string]interface{}); ok {
-		patch = p
-	} else {
-		patch = args
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
 	}
-	body, _ := json.Marshal(patch)
-	resp, err := s.client.UpdateSubscriber(sid, bytes.NewReader(body))
+	if subscriberData == nil {
+		return s.errorResponse(id, -32602, "missing subscriberData parameter", nil)
+	}
+
+	body, err := json.Marshal(subscriberData)
 	if err != nil {
-		return s.errorResponse(id, -32001, "backend error", err.Error())
+		return s.errorResponse(id, -32602, "failed to marshal subscriberData", err.Error())
+	}
+
+	resp, err := s.client.UpdateSubscriber(ueId, servingPlmnId, bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
 	defer resp.Body.Close()
+
 	b, _ := io.ReadAll(resp.Body)
-	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
-		"content": []map[string]string{{"type": "text", "text": string(b)}},
-		"status":  resp.Status,
-	}}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
+}
+
+func (s *Server) callSubscriberPatch(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+	patchData, _ := args["patchData"].(map[string]interface{})
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
+	}
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
+	}
+	if patchData == nil {
+		return s.errorResponse(id, -32602, "missing patchData parameter", nil)
+	}
+
+	body, err := json.Marshal(patchData)
+	if err != nil {
+		return s.errorResponse(id, -32602, "failed to marshal patchData", err.Error())
+	}
+
+	resp, err := s.client.PatchSubscriber(ueId, servingPlmnId, bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
 }
 
 func (s *Server) callSubscriberDelete(id interface{}, args map[string]interface{}) *jsonRPCResponse {
-	sid, _ := args["id"].(string)
-	if sid == "" {
-		return s.errorResponse(id, -32602, "missing id", nil)
+	ueId, _ := args["ueId"].(string)
+	servingPlmnId, _ := args["servingPlmnId"].(string)
+
+	if ueId == "" {
+		return s.errorResponse(id, -32602, "missing ueId parameter", nil)
 	}
-	resp, err := s.client.DeleteSubscriber(sid)
+	if servingPlmnId == "" {
+		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
+	}
+
+	resp, err := s.client.DeleteSubscriber(ueId, servingPlmnId)
 	if err != nil {
-		return s.errorResponse(id, -32001, "backend error", err.Error())
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
 	}
 	defer resp.Body.Close()
+
 	b, _ := io.ReadAll(resp.Body)
-	return &jsonRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]interface{}{
-		"content": []map[string]string{{"type": "text", "text": string(b)}},
-		"status":  resp.Status,
-	}}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
+}
+
+func (s *Server) callSubscriberDeleteMultiple(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	subscribers, _ := args["subscribers"].([]interface{})
+
+	if subscribers == nil || len(subscribers) == 0 {
+		return s.errorResponse(id, -32602, "missing or empty subscribers array", nil)
+	}
+
+	// Transform the input to match the webconsole API format
+	// The API expects: [{"plmnID": "...", "ueId": "..."}]
+	transformed := make([]map[string]string, 0, len(subscribers))
+	for _, sub := range subscribers {
+		subMap, ok := sub.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ueId, _ := subMap["ueId"].(string)
+		// Accept both servingPlmnId and plmnID
+		plmnId, _ := subMap["servingPlmnId"].(string)
+		if plmnId == "" {
+			plmnId, _ = subMap["plmnID"].(string)
+		}
+		if ueId != "" && plmnId != "" {
+			transformed = append(transformed, map[string]string{
+				"plmnID": plmnId,
+				"ueId":   ueId,
+			})
+		}
+	}
+
+	if len(transformed) == 0 {
+		return s.errorResponse(id, -32602, "no valid subscribers to delete", nil)
+	}
+
+	body, err := json.Marshal(transformed)
+	if err != nil {
+		return s.errorResponse(id, -32602, "failed to marshal subscribers", err.Error())
+	}
+
+	resp, err := s.client.DeleteMultipleSubscribers(bytes.NewReader(body))
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to call webconsole backend", err.Error())
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{{"type": "text", "text": string(b)}},
+			"status":  resp.Status,
+		},
+	}
 }
 
 func (s *Server) HandleSSE(c *gin.Context) {

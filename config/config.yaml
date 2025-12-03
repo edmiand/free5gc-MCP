@@ -9,7 +9,7 @@ server:
   jwt_public_key_path: ""
 free5gc:
   webui_base_url: "http://127.0.0.1:5000" # configure your free5GC WebUI backend
-  token: "" # token used when MCP calls the free5GC WebUI backend
-  subscribers_path: "/api/subscribers"
+  username: "admin" # webconsole login username
+  password: "free5gc" # webconsole login password
 infrastructure:
   use_microk8s: false

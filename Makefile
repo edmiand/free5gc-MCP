@@ -1,12 +1,15 @@
 BINARY=bin/free5gc-mcp
 
-.PHONY: build docker run install
+.PHONY: build docker run install clean
 
 build:
 	go build -o $(BINARY) ./cmd/server
 
 build-mock:
 	go build -o bin/mockwebui ./cmd/mockwebui
+
+clean:
+	rm -rf bin/
 
 docker:
 	docker build -t free5gc-mcp:latest .

@@ -88,20 +88,12 @@ info "REST: GET /health"
 curl_json GET "http://$MCP_ADDR/health" | pretty_json || true
 
 echo
-info "REST: POST /tools/convert-time"
-curl_json POST "http://$MCP_ADDR/tools/convert-time" '{"time":"2025-11-29T01:00:00Z","from":"UTC","to":"Asia/Kuala_Lumpur"}' | pretty_json || true
+info "REST: GET /tools/tenant/:tenantId/user"
+curl_json GET "http://$MCP_ADDR/tools/tenant/tenant-123/user" | pretty_json || true
 
 echo
-info "REST: GET /tools/subscribers (expect [])"
-curl_json GET "http://$MCP_ADDR/tools/subscribers" | pretty_json || true
-
-echo
-info "REST: POST /tools/subscribers (create)"
-curl_json POST "http://$MCP_ADDR/tools/subscribers" '{"id":"001010123456789","imsi":"001010123456789","authType":"5g_aka"}' | pretty_json || true
-
-echo
-info "REST: GET /tools/subscribers (should contain one)"
-curl_json GET "http://$MCP_ADDR/tools/subscribers" | pretty_json || true
+info "MCP: initialize"
+curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}' | pretty_json || true
 
 echo
 info "MCP: tools/list"
@@ -109,7 +101,7 @@ curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":2,"method":"tools/list
   (command -v jq >/dev/null && jq '{jsonrpc,id,tools: .result.tools|map(.name)}' || cat) || true
 
 echo
-info "MCP: tools/call subscriber_list"
+info "MCP: tools/call subscriber_list (expect [])"
 resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"subscriber_list","arguments":{}}}')
 if command -v jq >/dev/null; then
   echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
@@ -118,8 +110,8 @@ else
 fi
 
 echo
-info "MCP: tools/call subscriber_get"
-resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"subscriber_get","arguments":{"id":"001010123456789"}}}')
+info "MCP: tools/call subscriber_create"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"subscriber_create","arguments":{"ueId":"imsi-208930000000001","servingPlmnId":"20893","subscriberData":{"authType":"5g_aka","ueId":"imsi-208930000000001"}}}}')
 if command -v jq >/dev/null; then
   echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
 else
@@ -127,8 +119,26 @@ else
 fi
 
 echo
-info "MCP: tools/call subscriber_update"
-resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"subscriber_update","arguments":{"id":"001010123456789","patch":{"authType":"5g_aka_prime"}}}}')
+info "MCP: tools/call subscriber_get"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"subscriber_get","arguments":{"ueId":"imsi-208930000000001","servingPlmnId":"20893"}}}')
+if command -v jq >/dev/null; then
+  echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
+else
+  echo "$resp" | pretty_json
+fi
+
+echo
+info "MCP: tools/call subscriber_patch"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"subscriber_patch","arguments":{"ueId":"imsi-208930000000001","servingPlmnId":"20893","patchData":{"authType":"5g_aka_prime"}}}}')
+if command -v jq >/dev/null; then
+  echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
+else
+  echo "$resp" | pretty_json
+fi
+
+echo
+info "MCP: tools/call subscriber_list (should contain updated subscriber)"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"subscriber_list","arguments":{}}}')
 if command -v jq >/dev/null; then
   echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
 else
@@ -137,11 +147,25 @@ fi
 
 echo
 info "MCP: tools/call subscriber_delete"
-curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"subscriber_delete","arguments":{"id":"001010123456789"}}}' | pretty_json || true
+curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"subscriber_delete","arguments":{"ueId":"imsi-208930000000001","servingPlmnId":"20893"}}}' | pretty_json || true
 
 echo
-info "REST: GET /tools/subscribers (expect empty after delete)"
-curl_json GET "http://$MCP_ADDR/tools/subscribers" | pretty_json || true
+info "MCP: tools/call subscriber_list (expect empty after delete)"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"subscriber_list","arguments":{}}}')
+if command -v jq >/dev/null; then
+  echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
+else
+  echo "$resp" | pretty_json
+fi
+
+echo
+info "MCP: tools/call tenant_users_get"
+resp=$(curl_json POST "http://$MCP_ADDR/" '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"tenant_users_get","arguments":{"tenantId":"tenant-123"}}}')
+if command -v jq >/dev/null; then
+  echo "$resp" | jq -r '.result.content[0].text' | jq . || echo "$resp" | pretty_json
+else
+  echo "$resp" | pretty_json
+fi
 
 echo
 tick "All test calls executed. Logs: $LOG_DIR"

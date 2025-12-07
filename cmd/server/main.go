@@ -9,6 +9,7 @@ import (
 	"github.com/q1317540161/free5gc-MCP/pkg/auth"
 	"github.com/q1317540161/free5gc-MCP/pkg/config"
 	"github.com/q1317540161/free5gc-MCP/pkg/control"
+	"github.com/q1317540161/free5gc-MCP/pkg/k8s"
 )
 
 func main() {
@@ -35,6 +36,14 @@ func main() {
 		cfg.Free5GC.Password,
 		cfg.Free5GC.Free5GCPath,
 	)
+
+	// Initialize K8s manager if chart path is configured
+	if cfg.K8s.ChartPath != "" {
+		k8sManager := k8s.NewManager(cfg.K8s.K8sTool, cfg.K8s.HelmBasePath, cfg.K8s.ChartPath, cfg.K8s.UeransimChartPath, cfg.K8s.Namespace, cfg.K8s.ReleaseName)
+		client.SetK8sManager(k8sManager)
+		fmt.Printf("K8s manager initialized: tool=%s, chart=%s, ueransim=%s, namespace=%s\n", 
+			cfg.K8s.K8sTool, cfg.K8s.ChartPath, cfg.K8s.UeransimChartPath, cfg.K8s.Namespace)
+	}
 
 	// setup auth
 	// translate server config into auth config for API package

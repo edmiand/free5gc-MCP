@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/q1317540161/free5gc-MCP/pkg/k8s"
 )
 
 // Free5GCClient is a small wrapper to call the free5GC WebUI/backend.
@@ -26,6 +28,7 @@ type Free5GCClient struct {
 	TokenMu     sync.RWMutex
 	HTTPClient  *http.Client
 	Free5GCPath string // Path to free5gc directory for core control
+	K8sManager *k8s.Manager
 }
 
 type loginRequest struct {
@@ -47,6 +50,11 @@ func NewFree5GCClient(baseURL, username, password, free5gcPath string) *Free5GCC
 			Timeout: 15 * time.Second,
 		},
 	}
+}
+
+// SetK8sManager sets the K8s manager for helm operations
+func (c *Free5GCClient) SetK8sManager(manager *k8s.Manager) {
+	c.K8sManager = manager
 }
 
 // Login authenticates with the webconsole and stores the JWT token
@@ -238,7 +246,7 @@ func (c *Free5GCClient) PatchSubscriber(ueId, servingPlmnId string, bodyBytes []
 }
 
 // ============================================
-// Core Control Methods (Start/Stop/Status)
+// Local Core Control Methods (Start/Stop/Status)
 // ============================================
 
 // NFStatus represents the status of a network function
@@ -636,4 +644,64 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	}
 	
 	return result, nil
+}
+
+// ============================================
+// K8s/Helm Management Methods
+// ============================================
+
+// StartFree5GCHelm starts free5gc using helm on k8s
+func (c *Free5GCClient) StartFree5GCHelm() error {
+	if c.K8sManager == nil {
+		return fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.StartFree5GCHelm()
+}
+
+// StopFree5GCHelm stops free5gc helm deployment
+func (c *Free5GCClient) StopFree5GCHelm() error {
+	if c.K8sManager == nil {
+		return fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.StopFree5GCHelm()
+}
+
+// GetFree5GCHelmStatus gets the status of free5gc pods
+func (c *Free5GCClient) GetFree5GCHelmStatus() (string, error) {
+	if c.K8sManager == nil {
+		return "", fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.GetFree5GCHelmStatus()
+}
+
+// UpgradeFree5GCHelm upgrades the existing free5gc helm deployment
+func (c *Free5GCClient) UpgradeFree5GCHelm() error {
+	if c.K8sManager == nil {
+		return fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.UpgradeFree5GCHelm()
+}
+
+// StartUeransimHelm starts ueransim using helm on k8s
+func (c *Free5GCClient) StartUeransimHelm() error {
+	if c.K8sManager == nil {
+		return fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.StartUeransimHelm()
+}
+
+// StopUeransimHelm stops ueransim helm deployment
+func (c *Free5GCClient) StopUeransimHelm() error {
+	if c.K8sManager == nil {
+		return fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.StopUeransimHelm()
+}
+
+// GetUeransimHelmStatus gets the status of ueransim pods
+func (c *Free5GCClient) GetUeransimHelmStatus() (string, error) {
+	if c.K8sManager == nil {
+		return "", fmt.Errorf("k8s manager not configured")
+	}
+	return c.K8sManager.GetUeransimHelmStatus()
 }

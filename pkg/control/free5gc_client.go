@@ -307,7 +307,7 @@ var NFEndpoints = map[string]NFEndpoint{
 	"upf":        {IP: "127.0.0.8", Port: 8805},    // UPF PFCP
 	"chf":        {IP: "127.0.0.113", Port: 8000},  // CHF SBI
 	"nef":        {IP: "127.0.0.5", Port: 8000},    // NEF SBI
-	"webconsole": {IP: "0.0.0.0", Port: 5000},      // Webconsole HTTP (binds to all interfaces)
+	"webconsole": {IP: "0.0.0.0", Port: 30500},      // Webconsole HTTP (binds to all interfaces)
 }
 
 // extractPIDFromSSLine extracts the PID from an ss command output line
@@ -582,7 +582,7 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 		if err := wcCmd.Run(); err != nil {
 			// Try fuser as fallback if available
 			if fuserErr == nil {
-				fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "5000/tcp")
+				fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "30500/tcp")
 				if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 					result.Details = append(result.Details, "Webconsole was not running or already stopped")
 				} else {
@@ -595,7 +595,7 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 			result.Details = append(result.Details, "Webconsole stopped")
 		}
 	} else if fuserErr == nil {
-		fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "5000/tcp")
+		fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "30500/tcp")
 		if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 			result.Details = append(result.Details, "Webconsole was not running or already stopped")
 		} else {

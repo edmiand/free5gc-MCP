@@ -16,16 +16,15 @@ This project is an MCP (Model Context Protocol) server implemented in Go that pr
 
 1. [Prerequisites](#prerequisites)
 2. [free5GC Setup](#free5gc-setup)
-3. [free5GC-Helm Setup](#free5gc-helm-setup)
-4. [Configuring Sudo for MCP Server](#configuring-sudo-for-mcp-server)
-5. [Patching free5GC run.sh](#patching-free5gc-runsh)
-6. [Setting Up the MCP Server](#setting-up-the-mcp-server)
-7. [VS Code MCP Configuration](#vs-code-mcp-configuration)
-8. [Tool Summary](#tool-summary)
-9. [Configuration Reference](#configuration-reference)
-10. [Usage Examples](#usage-examples)
-11. [Quick Start (TL;DR)](#quick-start-tldr)
-12. [Troubleshooting](#troubleshooting)
+3. [Configuring Sudo for MCP Server](#configuring-sudo-for-mcp-server)
+4. [Patching free5GC run.sh](#patching-free5gc-runsh)
+5. [Setting Up the MCP Server](#setting-up-the-mcp-server)
+6. [VS Code MCP Configuration](#vs-code-mcp-configuration)
+7. [Tool Summary](#tool-summary)
+8. [Configuration Reference](#configuration-reference)
+9. [Usage Examples](#usage-examples)
+10. [Quick Start (TL;DR)](#quick-start-tldr)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -40,7 +39,7 @@ This project is an MCP (Model Context Protocol) server implemented in Go that pr
 ---
 
 ## free5GC Setup
-
+This setup is only for local free5gc. Skip this if you use free5gc-helm.
 ### Step 1: Start MongoDB
 
 ```bash
@@ -97,8 +96,6 @@ curl -s -X POST http://127.0.0.1:30500/api/login \
 ```
 
 ---
-
-## free5GC-Helm Setup
 
 ## Configuring Sudo for MCP Server
 

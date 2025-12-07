@@ -18,6 +18,7 @@ type Free5GCConfig struct {
 	BaseURL         string `yaml:"webui_base_url"`
 	Username        string `yaml:"username"`
 	Password        string `yaml:"password"`
+	Free5GCPath     string `yaml:"free5gc_path"` // Path to free5gc directory for core control
 	SubscribersPath string `yaml:"subscribers_path"`
 }
 
@@ -38,10 +39,7 @@ func Load(path string) (*Config, error) {
 	}
 	// set defaults
 	if cfg.Server.Addr == "" {
-		cfg.Server.Addr = ":8080"
-	}
-	if cfg.Free5GC.SubscribersPath == "" {
-		cfg.Free5GC.SubscribersPath = "/api/subscribers"
+		cfg.Server.Addr = "127.0.0.1:8080"
 	}
 	return &cfg, nil
 }

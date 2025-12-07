@@ -1,4 +1,5 @@
 bin/
 *.exe
 *.log
+*.pid
 vendor/

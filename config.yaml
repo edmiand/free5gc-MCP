@@ -11,6 +11,6 @@ free5gc:
   webui_base_url: "http://127.0.0.1:5000" # configure your free5GC WebUI backend
   username: "admin" # webconsole login username
   password: "free5gc" # webconsole login password - CHANGE THIS IN PRODUCTION!
-  free5gc_path: "" # path to free5gc directory for core control (start/stop/status), e.g., /home/username/free5gc
+  free5gc_path: "" # TODO: Set this to your free5gc directory for core control (start/stop/status), e.g., /home/username/free5gc
 infrastructure:
   use_microk8s: false

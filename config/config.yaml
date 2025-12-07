@@ -16,9 +16,9 @@ infrastructure:
   use_microk8s: false
 k8s:
   k8s_tool: "microk8s" # "microk8s" | "kubectl" | "k3s"
-  base_path: "/home/jijun/free5gc-helm" # path to free5gc-helm
-  chart_path: "/home/jijun/free5gc-helm/charts/free5gc" # path to free5gc-helm chart
-  ueransim_chart_path: "/home/jijun/free5gc-helm/charts/ueransim" # path to ueransim chart
+  base_path: "" # path to free5gc-helm
+  chart_path: "" # path to free5gc-helm chart
+  ueransim_chart_path: "" # path to ueransim chart
   namespace: "free5gc" # k8s namespace for free5gc
   release_name: "free5gc" # helm release name
 

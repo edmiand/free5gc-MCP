@@ -242,6 +242,22 @@ func (c *Free5GCClient) PatchSubscriber(ueId, servingPlmnId string, bodyBytes []
 // Local Core Control Methods (Start/Stop/Status)
 // ============================================
 
+// NFResourceUsage represents CPU and memory usage for a single network function process
+type NFResourceUsage struct {
+	Name    string  `json:"name"`
+	PID     int     `json:"pid,omitempty"`
+	CPU     float64 `json:"cpu_percent,omitempty"`
+	MemMB   float64 `json:"mem_mb,omitempty"`
+	Status  string  `json:"status"` // "running", "sleeping", "not running", etc.
+	Running bool    `json:"running"`
+}
+
+// CoreResources represents CPU and memory usage for all free5GC processes
+type CoreResources struct {
+	NFs        []NFResourceUsage `json:"network_functions"`
+	Webconsole NFResourceUsage   `json:"webconsole"`
+}
+
 // NFStatus represents the status of a network function
 type NFStatus struct {
 	Name    string `json:"name"`
@@ -536,6 +552,68 @@ func (c *Free5GCClient) StartFree5GC(ctx context.Context) (*CoreStartResult, err
 	}
 	
 	return result, nil
+}
+
+// findProcessUsage scans pre-parsed ps aux lines for a process matching processName
+// and returns its resource usage. Only the first matching non-grep process is returned.
+func findProcessUsage(lines []string, processName string) NFResourceUsage {
+	usage := NFResourceUsage{
+		Name:    processName,
+		Status:  "not running",
+		Running: false,
+	}
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 11 {
+			continue
+		}
+		command := fields[10]
+		if strings.Contains(command, "grep") {
+			continue
+		}
+		if filepath.Base(command) != processName {
+			continue
+		}
+		var pid int
+		fmt.Sscanf(fields[1], "%d", &pid)
+		var cpu float64
+		fmt.Sscanf(fields[2], "%f", &cpu)
+		var rssKB float64
+		fmt.Sscanf(fields[5], "%f", &rssKB)
+		stat := fields[7]
+		status := "sleeping"
+		if strings.HasPrefix(stat, "R") {
+			status = "running"
+		} else if strings.HasPrefix(stat, "Z") {
+			status = "zombie"
+		}
+		usage.PID = pid
+		usage.CPU = cpu
+		usage.MemMB = rssKB / 1024.0
+		usage.Status = status
+		usage.Running = true
+		break
+	}
+	return usage
+}
+
+// GetFree5GCResources returns CPU and memory usage for all free5GC network function processes
+func (c *Free5GCClient) GetFree5GCResources() (*CoreResources, error) {
+	cmd := exec.Command("ps", "aux")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to run ps aux: %w", err)
+	}
+	lines := strings.Split(string(output), "\n")
+
+	resources := &CoreResources{
+		NFs: make([]NFResourceUsage, 0, len(NFList)),
+	}
+	for _, nf := range NFList {
+		resources.NFs = append(resources.NFs, findProcessUsage(lines, nf))
+	}
+	resources.Webconsole = findProcessUsage(lines, "webconsole")
+	return resources, nil
 }
 
 // StopFree5GC stops all free5GC network functions and webconsole

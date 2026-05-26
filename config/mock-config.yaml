@@ -6,5 +6,3 @@ free5gc:
   webui_base_url: "http://127.0.0.1:5050"
   token: ""
   subscribers_path: "/api/subscribers"
-infrastructure:
-  use_microk8s: false

@@ -581,11 +581,11 @@ func findProcessUsage(lines []string, processName string) NFResourceUsage {
 		var rssKB float64
 		fmt.Sscanf(fields[5], "%f", &rssKB)
 		stat := fields[7]
-		status := "sleeping"
-		if strings.HasPrefix(stat, "R") {
-			status = "running"
-		} else if strings.HasPrefix(stat, "Z") {
+		status := "running"
+		if strings.HasPrefix(stat, "Z") {
 			status = "zombie"
+		} else if strings.HasPrefix(stat, "T") {
+			status = "stopped"
 		}
 		usage.PID = pid
 		usage.CPU = cpu

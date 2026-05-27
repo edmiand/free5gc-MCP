@@ -798,14 +798,25 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	// Check if pkill is available
 	pkillPath, pkillErr := exec.LookPath("pkill")
 	fuserPath, fuserErr := exec.LookPath("fuser")
-	
+	sudoPath, sudoErr := exec.LookPath("sudo")
+
 	wcPortStr := fmt.Sprintf("%d/tcp", c.webconsolePort())
 	if pkillErr == nil {
-		wcCmd := exec.CommandContext(ctx, pkillPath, "-f", webconsoleBinPath)
+		var wcCmd *exec.Cmd
+		if sudoErr == nil {
+			wcCmd = exec.CommandContext(ctx, sudoPath, pkillPath, "-f", webconsoleBinPath)
+		} else {
+			wcCmd = exec.CommandContext(ctx, pkillPath, "-f", webconsoleBinPath)
+		}
 		if err := wcCmd.Run(); err != nil {
 			// Try fuser as fallback if available
 			if fuserErr == nil {
-				fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
+				var fuserCmd *exec.Cmd
+				if sudoErr == nil {
+					fuserCmd = exec.CommandContext(ctx, sudoPath, fuserPath, "-k", wcPortStr)
+				} else {
+					fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
+				}
 				if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 					result.Details = append(result.Details, "Webconsole was not running or already stopped")
 				} else {
@@ -818,7 +829,12 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 			result.Details = append(result.Details, "Webconsole stopped")
 		}
 	} else if fuserErr == nil {
-		fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
+		var fuserCmd *exec.Cmd
+		if sudoErr == nil {
+			fuserCmd = exec.CommandContext(ctx, sudoPath, fuserPath, "-k", wcPortStr)
+		} else {
+			fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
+		}
 		if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 			result.Details = append(result.Details, "Webconsole was not running or already stopped")
 		} else {
@@ -827,20 +843,28 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	} else {
 		result.Warnings = append(result.Warnings, "Neither 'pkill' nor 'fuser' commands are available to stop webconsole. Please install at least one of them.")
 	}
-	
-	result.Details = append(result.Details, "Executing: ./force_kill.sh")
-	
-	// Execute force_kill.sh with context
+
+	result.Details = append(result.Details, "Executing: sudo ./force_kill.sh")
+
+	// Execute force_kill.sh with sudo to kill root-owned NF processes (started via sudo run.sh)
 	forceKillPath := filepath.Join(c.Free5GCPath, "force_kill.sh")
-	cmd := exec.CommandContext(ctx, "bash", forceKillPath)
+	var cmd *exec.Cmd
+	if sudoErr == nil {
+		cmd = exec.CommandContext(ctx, sudoPath, "bash", forceKillPath)
+	} else {
+		cmd = exec.CommandContext(ctx, "bash", forceKillPath)
+	}
 	cmd.Dir = c.Free5GCPath
-	
+
 	// Run the command and wait for it to complete
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		result.Details = append(result.Details, fmt.Sprintf("force_kill.sh output: %s", string(output)))
+	if len(output) > 0 {
+		result.Details = append(result.Details, fmt.Sprintf("force_kill.sh output: %s", strings.TrimSpace(string(output))))
 	}
-	
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("force_kill.sh exited with error: %v", err))
+	}
+
 	result.Details = append(result.Details, "force_kill.sh executed")
 	
 	// Wait a moment for processes to terminate

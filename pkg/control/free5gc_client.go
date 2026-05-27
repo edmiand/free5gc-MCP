@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +50,16 @@ func NewFree5GCClient(baseURL, username, password, free5gcPath string) *Free5GCC
 			Timeout: 15 * time.Second,
 		},
 	}
+}
+
+// webconsolePort parses the port from BaseURL, defaulting to 30500.
+func (c *Free5GCClient) webconsolePort() int {
+	if u, err := url.Parse(c.BaseURL); err == nil {
+		if port, err := strconv.Atoi(u.Port()); err == nil && port > 0 {
+			return port
+		}
+	}
+	return 30500
 }
 
 // Login authenticates with the webconsole and stores the JWT token
@@ -332,7 +344,6 @@ var NFEndpoints = map[string]NFEndpoint{
 	"upf":        {IP: "127.0.0.8", Port: 8805},    // UPF PFCP
 	"chf":        {IP: "127.0.0.113", Port: 8000},  // CHF SBI
 	"nef":        {IP: "127.0.0.5", Port: 8000},    // NEF SBI
-	"webconsole": {IP: "0.0.0.0", Port: 30500},      // Webconsole HTTP (binds to all interfaces)
 }
 
 // extractPIDFromSSLine extracts the PID from an ss command output line
@@ -425,15 +436,15 @@ func (c *Free5GCClient) GetFree5GCStatus() (*CoreStatus, error) {
 		}
 	}
 	
-	// Check webconsole (TCP only)
-	wcConfig := NFEndpoints["webconsole"]
-	wcRunning, wcPid := checkPortListening(wcConfig.IP, wcConfig.Port, false)
+	// Check webconsole (TCP only) — port derived from configured BaseURL
+	wcPort := c.webconsolePort()
+	wcRunning, wcPid := checkPortListening("0.0.0.0", wcPort, false)
 	status.Webconsole = NFStatus{
 		Name:    "webconsole",
 		Running: wcRunning,
 		PID:     wcPid,
-		IP:      wcConfig.IP,
-		Port:    wcConfig.Port,
+		IP:      "0.0.0.0",
+		Port:    wcPort,
 	}
 	
 	// Determine overall status
@@ -788,12 +799,13 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	pkillPath, pkillErr := exec.LookPath("pkill")
 	fuserPath, fuserErr := exec.LookPath("fuser")
 	
+	wcPortStr := fmt.Sprintf("%d/tcp", c.webconsolePort())
 	if pkillErr == nil {
 		wcCmd := exec.CommandContext(ctx, pkillPath, "-f", webconsoleBinPath)
 		if err := wcCmd.Run(); err != nil {
 			// Try fuser as fallback if available
 			if fuserErr == nil {
-				fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "30500/tcp")
+				fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
 				if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 					result.Details = append(result.Details, "Webconsole was not running or already stopped")
 				} else {
@@ -806,7 +818,7 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 			result.Details = append(result.Details, "Webconsole stopped")
 		}
 	} else if fuserErr == nil {
-		fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", "30500/tcp")
+		fuserCmd := exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
 		if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
 			result.Details = append(result.Details, "Webconsole was not running or already stopped")
 		} else {

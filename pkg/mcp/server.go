@@ -600,6 +600,19 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"readOnlyHint": true,
 			},
 		},
+		{
+			"name":        "local_free5gc_uptime",
+			"description": "Get uptime information for each free5GC network function process. Returns PID, start time, how long the process has been running, and process state for each NF (NRF, AMF, SMF, UDR, PCF, UDM, NSSF, AUSF, UPF, CHF, NEF) and the webconsole.",
+			"inputSchema": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+				"required":   []string{},
+			},
+			"annotations": map[string]interface{}{
+				"title":        "Get free5GC Uptime",
+				"readOnlyHint": true,
+			},
+		},
 	}
 	return &jsonRPCResponse{
 		JSONRPC: "2.0",
@@ -644,6 +657,8 @@ func (s *Server) handleCallTool(req jsonRPCRequest) *jsonRPCResponse {
 		return s.callFree5GCStatus(req.ID)
 	case "local_free5gc_resources":
 		return s.callFree5GCResources(req.ID)
+	case "local_free5gc_uptime":
+		return s.callFree5GCUptime(req.ID)
 	default:
 		return s.errorResponse(req.ID, -32601, "unknown tool", params.Name)
 	}
@@ -1301,6 +1316,53 @@ func (s *Server) callFree5GCResources(id interface{}) *jsonRPCResponse {
 			},
 			"structuredData": resources,
 			"rawJSON":        string(resourcesJSON),
+		},
+	}
+}
+
+func (s *Server) callFree5GCUptime(id interface{}) *jsonRPCResponse {
+	uptime, err := s.client.GetFree5GCUptime()
+	if err != nil {
+		return s.errorResponse(id, -32001, "failed to get free5gc uptime", err.Error())
+	}
+
+	var table strings.Builder
+	table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n", "NF", "PID", "Started", "Uptime", "State"))
+	table.WriteString("--------------------------------------------------------------\n")
+
+	for _, nf := range uptime.NFs {
+		if nf.Running {
+			table.WriteString(fmt.Sprintf("%-12s %-6d %-20s %-14s %s\n",
+				strings.ToUpper(nf.Name), nf.PID, nf.StartTime, nf.Uptime, nf.Status))
+		} else {
+			table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n",
+				strings.ToUpper(nf.Name), "-", "-", "-", "not running"))
+		}
+	}
+
+	wc := uptime.Webconsole
+	if wc.Running {
+		table.WriteString(fmt.Sprintf("%-12s %-6d %-20s %-14s %s\n",
+			"WEBCONSOLE", wc.PID, wc.StartTime, wc.Uptime, wc.Status))
+	} else {
+		table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n",
+			"WEBCONSOLE", "-", "-", "-", "not running"))
+	}
+
+	uptimeJSON, err := json.MarshalIndent(uptime, "", "  ")
+	if err != nil {
+		return s.errorResponse(id, -32002, "failed to marshal uptime to JSON", err.Error())
+	}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{
+				{"type": "text", "text": table.String()},
+			},
+			"structuredData": uptime,
+			"rawJSON":        string(uptimeJSON),
 		},
 	}
 }

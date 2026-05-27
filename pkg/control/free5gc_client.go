@@ -258,6 +258,22 @@ type CoreResources struct {
 	Webconsole NFResourceUsage   `json:"webconsole"`
 }
 
+// NFUptime represents uptime information for a single network function process
+type NFUptime struct {
+	Name      string `json:"name"`
+	PID       int    `json:"pid,omitempty"`
+	StartTime string `json:"start_time,omitempty"`
+	Uptime    string `json:"uptime,omitempty"`
+	Status    string `json:"status"` // "running", "sleeping", "stopped", "zombie", "not running"
+	Running   bool   `json:"running"`
+}
+
+// CoreUptime represents uptime information for all free5GC processes
+type CoreUptime struct {
+	NFs        []NFUptime `json:"network_functions"`
+	Webconsole NFUptime   `json:"webconsole"`
+}
+
 // NFStatus represents the status of a network function
 type NFStatus struct {
 	Name    string `json:"name"`
@@ -614,6 +630,130 @@ func (c *Free5GCClient) GetFree5GCResources() (*CoreResources, error) {
 	}
 	resources.Webconsole = findProcessUsage(lines, "webconsole")
 	return resources, nil
+}
+
+// parseEtime converts ps etime format ([[DD-]HH:]MM:SS) to human-readable string
+func parseEtime(etime string) string {
+	etime = strings.TrimSpace(etime)
+	var days, hours, minutes, seconds int
+
+	if idx := strings.Index(etime, "-"); idx != -1 {
+		fmt.Sscanf(etime[:idx], "%d", &days)
+		etime = etime[idx+1:]
+	}
+
+	parts := strings.Split(etime, ":")
+	switch len(parts) {
+	case 3:
+		fmt.Sscanf(parts[0], "%d", &hours)
+		fmt.Sscanf(parts[1], "%d", &minutes)
+		fmt.Sscanf(parts[2], "%d", &seconds)
+	case 2:
+		fmt.Sscanf(parts[0], "%d", &minutes)
+		fmt.Sscanf(parts[1], "%d", &seconds)
+	}
+
+	var result strings.Builder
+	if days > 0 {
+		fmt.Fprintf(&result, "%dd ", days)
+	}
+	if hours > 0 || days > 0 {
+		fmt.Fprintf(&result, "%dh ", hours)
+	}
+	if minutes > 0 || hours > 0 || days > 0 {
+		fmt.Fprintf(&result, "%dm ", minutes)
+	}
+	fmt.Fprintf(&result, "%ds", seconds)
+	return result.String()
+}
+
+// parseLstart converts ps lstart format to "YYYY-MM-DD HH:MM:SS"
+func parseLstart(lstart string) string {
+	lstart = strings.TrimSpace(lstart)
+	// ps lstart: "Tue May 27 09:00:00 2026" or "Tue May  7 09:00:00 2026" (single-digit day)
+	for _, layout := range []string{"Mon Jan 2 15:04:05 2006", "Mon Jan  2 15:04:05 2006"} {
+		if t, err := time.Parse(layout, lstart); err == nil {
+			return t.Format("2006-01-02 15:04:05")
+		}
+	}
+	return lstart
+}
+
+func findProcessUptime(auxLines []string, processName string) NFUptime {
+	result := NFUptime{
+		Name:    processName,
+		Status:  "not running",
+		Running: false,
+	}
+
+	var pid int
+	var status string
+	for _, line := range auxLines {
+		fields := strings.Fields(line)
+		if len(fields) < 11 {
+			continue
+		}
+		command := fields[10]
+		if strings.Contains(command, "grep") {
+			continue
+		}
+		if filepath.Base(command) != processName {
+			continue
+		}
+		fmt.Sscanf(fields[1], "%d", &pid)
+		stat := fields[7]
+		status = "sleeping"
+		if strings.HasPrefix(stat, "R") {
+			status = "running"
+		} else if strings.HasPrefix(stat, "Z") {
+			status = "zombie"
+		} else if strings.HasPrefix(stat, "T") {
+			status = "stopped"
+		}
+		break
+	}
+
+	if pid == 0 {
+		return result
+	}
+
+	pidStr := fmt.Sprintf("%d", pid)
+
+	lstartOut, err := exec.Command("ps", "-p", pidStr, "-o", "lstart=").Output()
+	if err != nil {
+		return result
+	}
+
+	etimeOut, err := exec.Command("ps", "-p", pidStr, "-o", "etime=").Output()
+	if err != nil {
+		return result
+	}
+
+	result.PID = pid
+	result.Status = status
+	result.Running = true
+	result.StartTime = parseLstart(string(lstartOut))
+	result.Uptime = parseEtime(string(etimeOut))
+	return result
+}
+
+// GetFree5GCUptime returns uptime information for all free5GC network function processes
+func (c *Free5GCClient) GetFree5GCUptime() (*CoreUptime, error) {
+	cmd := exec.Command("ps", "aux")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to run ps aux: %w", err)
+	}
+	lines := strings.Split(string(output), "\n")
+
+	uptime := &CoreUptime{
+		NFs: make([]NFUptime, 0, len(NFList)),
+	}
+	for _, nf := range NFList {
+		uptime.NFs = append(uptime.NFs, findProcessUptime(lines, nf))
+	}
+	uptime.Webconsole = findProcessUptime(lines, "webconsole")
+	return uptime, nil
 }
 
 // StopFree5GC stops all free5GC network functions and webconsole

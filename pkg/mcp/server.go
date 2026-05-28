@@ -1352,13 +1352,13 @@ func (s *Server) callFree5GCUptime(id interface{}) *jsonRPCResponse {
 	}
 
 	var table strings.Builder
-	table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n", "NF", "PID", "Started", "Uptime", "State"))
+	table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n", "NF", "PID", "Started", "Uptime", "Status"))
 	table.WriteString("--------------------------------------------------------------\n")
 
 	for _, nf := range uptime.NFs {
 		if nf.Running {
 			table.WriteString(fmt.Sprintf("%-12s %-6d %-20s %-14s %s\n",
-				strings.ToUpper(nf.Name), nf.PID, nf.StartTime, nf.Uptime, nf.Status))
+				strings.ToUpper(nf.Name), nf.PID, nf.StartTime, nf.Uptime, "OK"))
 		} else {
 			table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n",
 				strings.ToUpper(nf.Name), "-", "-", "-", "not running"))
@@ -1368,7 +1368,7 @@ func (s *Server) callFree5GCUptime(id interface{}) *jsonRPCResponse {
 	wc := uptime.Webconsole
 	if wc.Running {
 		table.WriteString(fmt.Sprintf("%-12s %-6d %-20s %-14s %s\n",
-			"WEBCONSOLE", wc.PID, wc.StartTime, wc.Uptime, wc.Status))
+			"WEBCONSOLE", wc.PID, wc.StartTime, wc.Uptime, "OK"))
 	} else {
 		table.WriteString(fmt.Sprintf("%-12s %-6s %-20s %-14s %s\n",
 			"WEBCONSOLE", "-", "-", "-", "not running"))

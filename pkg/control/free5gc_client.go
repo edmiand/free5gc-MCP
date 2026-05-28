@@ -810,47 +810,41 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	sudoPath, sudoErr := exec.LookPath("sudo")
 
 	wcPortStr := fmt.Sprintf("%d/tcp", c.webconsolePort())
+
+	// webconsole is started without sudo, so try plain pkill first; fall back to sudo for
+	// cases where it was started as root outside of this tool.
+	wcStopped := false
 	if pkillErr == nil {
-		var wcCmd *exec.Cmd
-		if sudoErr == nil {
-			wcCmd = exec.CommandContext(ctx, sudoPath, pkillPath, "-f", webconsoleBinPath)
-		} else {
-			wcCmd = exec.CommandContext(ctx, pkillPath, "-f", webconsoleBinPath)
-		}
-		if err := wcCmd.Run(); err != nil {
-			// Try fuser as fallback if available
-			if fuserErr == nil {
-				var fuserCmd *exec.Cmd
-				if sudoErr == nil {
-					fuserCmd = exec.CommandContext(ctx, sudoPath, fuserPath, "-k", wcPortStr)
-				} else {
-					fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
-				}
-				if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("pkill failed (%v); fuser also failed (%v) — webconsole may still be running or sudo requires NOPASSWD", err, fuserErr2))
-				} else {
-					result.Details = append(result.Details, "Webconsole stopped (via port kill)")
-				}
-			} else {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("pkill failed (%v) and fuser is not available — webconsole may still be running or sudo requires NOPASSWD", err))
-			}
-		} else {
+		// Try without sudo first (normal case)
+		if err := exec.CommandContext(ctx, pkillPath, "-f", webconsoleBinPath).Run(); err == nil {
 			result.Details = append(result.Details, "Webconsole stopped")
+			wcStopped = true
+		} else if sudoErr == nil {
+			// Try with sudo (webconsole started as root)
+			if err2 := exec.CommandContext(ctx, sudoPath, pkillPath, "-f", webconsoleBinPath).Run(); err2 == nil {
+				result.Details = append(result.Details, "Webconsole stopped (via sudo)")
+				wcStopped = true
+			}
 		}
-	} else if fuserErr == nil {
-		var fuserCmd *exec.Cmd
-		if sudoErr == nil {
-			fuserCmd = exec.CommandContext(ctx, sudoPath, fuserPath, "-k", wcPortStr)
-		} else {
-			fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
-		}
-		if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("fuser failed (%v) — webconsole may still be running or sudo requires NOPASSWD", fuserErr2))
-		} else {
+	}
+	if !wcStopped && fuserErr == nil {
+		// fuser fallback: try without sudo, then with sudo
+		if err := exec.CommandContext(ctx, fuserPath, "-k", wcPortStr).Run(); err == nil {
 			result.Details = append(result.Details, "Webconsole stopped (via port kill)")
+			wcStopped = true
+		} else if sudoErr == nil {
+			if err2 := exec.CommandContext(ctx, sudoPath, fuserPath, "-k", wcPortStr).Run(); err2 == nil {
+				result.Details = append(result.Details, "Webconsole stopped (via port kill, sudo)")
+				wcStopped = true
+			}
 		}
-	} else {
-		result.Warnings = append(result.Warnings, "Neither 'pkill' nor 'fuser' commands are available to stop webconsole. Please install at least one of them.")
+	}
+	if !wcStopped {
+		if pkillErr != nil && fuserErr != nil {
+			result.Warnings = append(result.Warnings, "Neither 'pkill' nor 'fuser' commands are available to stop webconsole. Please install at least one of them.")
+		} else {
+			result.Warnings = append(result.Warnings, "Could not stop webconsole — process not found or permission denied")
+		}
 	}
 
 	result.Details = append(result.Details, "Executing: sudo ./force_kill.sh")

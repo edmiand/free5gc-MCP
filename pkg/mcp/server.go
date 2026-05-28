@@ -613,6 +613,29 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"readOnlyHint": true,
 			},
 		},
+		{
+			"name":        "local_free5gc_backup",
+			"description": "Back up free5GC configuration files, certificates, and MongoDB subscriber data by running backup.sh in the free5GC directory. The backup runs against a live instance — free5GC does not need to be stopped first.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"backup_path": map[string]interface{}{
+						"type":        "string",
+						"description": "Root directory where the timestamped backup folder will be created (default: ./backup relative to the free5GC directory). Passed as -p to backup.sh.",
+					},
+					"timeout_seconds": map[string]interface{}{
+						"type":        "integer",
+						"description": "Maximum time to wait for the backup to complete in seconds (default: 120)",
+					},
+				},
+				"required": []string{},
+			},
+			"annotations": map[string]interface{}{
+				"title":           "Backup free5GC",
+				"readOnlyHint":    false,
+				"destructiveHint": false,
+			},
+		},
 	}
 	return &jsonRPCResponse{
 		JSONRPC: "2.0",
@@ -659,6 +682,8 @@ func (s *Server) handleCallTool(req jsonRPCRequest) *jsonRPCResponse {
 		return s.callFree5GCResources(req.ID)
 	case "local_free5gc_uptime":
 		return s.callFree5GCUptime(req.ID)
+	case "local_free5gc_backup":
+		return s.callFree5GCBackup(req.ID, params.Arguments)
 	default:
 		return s.errorResponse(req.ID, -32601, "unknown tool", params.Name)
 	}
@@ -1394,6 +1419,68 @@ func (s *Server) HandleSSE(c *gin.Context) {
 		case <-c.Request.Context().Done():
 			return
 		}
+	}
+}
+
+func (s *Server) callFree5GCBackup(id interface{}, args map[string]interface{}) *jsonRPCResponse {
+	timeoutSec := 120
+	if t, ok := args["timeout_seconds"].(float64); ok && t > 0 {
+		timeoutSec = int(t)
+		if timeoutSec > 600 {
+			timeoutSec = 600
+		}
+	}
+
+	backupPath, _ := args["backup_path"].(string)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
+	result, err := s.client.RunBackup(ctx, backupPath)
+	cancel()
+	if err != nil && result == nil {
+		return s.errorResponse(id, -32001, "failed to run backup", err.Error())
+	}
+
+	var responseText strings.Builder
+	if result.Success {
+		responseText.WriteString("## ✅ free5GC Backup Completed\n\n")
+	} else {
+		responseText.WriteString("## ❌ free5GC Backup Failed\n\n")
+	}
+
+	responseText.WriteString(fmt.Sprintf("**Result:** %s\n\n", result.Message))
+
+	if len(result.Details) > 0 {
+		responseText.WriteString("### Details\n")
+		for _, detail := range result.Details {
+			responseText.WriteString(fmt.Sprintf("- %s\n", detail))
+		}
+		responseText.WriteString("\n")
+	}
+
+	if len(result.Warnings) > 0 {
+		responseText.WriteString("### ⚠️ Warnings\n")
+		for _, warning := range result.Warnings {
+			responseText.WriteString(fmt.Sprintf("- %s\n", warning))
+		}
+		responseText.WriteString("\n")
+	}
+
+	resultJSON, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return s.errorResponse(id, -32002, "failed to marshal backup result to JSON", err.Error())
+	}
+
+	return &jsonRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Result: map[string]interface{}{
+			"content": []map[string]string{
+				{"type": "text", "text": responseText.String()},
+			},
+			"success":        result.Success,
+			"structuredData": result,
+			"rawJSON":        string(resultJSON),
+		},
 	}
 }
 

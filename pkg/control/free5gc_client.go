@@ -322,6 +322,15 @@ type CoreStopResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// BackupResult represents the result of running backup.sh
+type BackupResult struct {
+	Success    bool     `json:"success"`
+	Message    string   `json:"message"`
+	BackupPath string   `json:"backup_path,omitempty"`
+	Details    []string `json:"details"`
+	Warnings   []string `json:"warnings,omitempty"`
+}
+
 // NFList is the list of network functions to manage
 var NFList = []string{"nrf", "amf", "smf", "udr", "pcf", "udm", "nssf", "ausf", "upf", "chf", "nef"}
 
@@ -889,7 +898,66 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 		result.Success = true
 		result.Message = "Stop command executed"
 	}
-	
+
+	return result, nil
+}
+
+// RunBackup executes backup.sh in the free5GC directory.
+// backupRoot is passed as -p to the script; empty string uses the script's default (./backup).
+func (c *Free5GCClient) RunBackup(ctx context.Context, backupRoot string) (*BackupResult, error) {
+	result := &BackupResult{
+		Details:  make([]string, 0),
+		Warnings: make([]string, 0),
+	}
+
+	if c.Free5GCPath == "" {
+		result.Message = "free5gc_path is not configured"
+		return result, nil
+	}
+
+	if _, err := os.Stat(c.Free5GCPath); err != nil {
+		result.Message = fmt.Sprintf("free5gc path does not exist: %v", err)
+		return result, nil
+	}
+
+	backupScriptPath := filepath.Join(c.Free5GCPath, "backup.sh")
+	if _, err := os.Stat(backupScriptPath); err != nil {
+		result.Message = fmt.Sprintf("backup.sh not found in %s", c.Free5GCPath)
+		return result, nil
+	}
+
+	args := []string{}
+	if backupRoot != "" {
+		args = []string{"-p", backupRoot}
+	}
+
+	cmd := exec.CommandContext(ctx, backupScriptPath, args...)
+	cmd.Dir = c.Free5GCPath
+
+	output, err := cmd.CombinedOutput()
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		result.Details = append(result.Details, line)
+		if strings.HasPrefix(line, "Backup path: ") {
+			result.BackupPath = strings.TrimPrefix(line, "Backup path: ")
+		}
+	}
+
+	if err != nil {
+		result.Success = false
+		result.Message = fmt.Sprintf("Backup failed: %v", err)
+		return result, nil
+	}
+
+	result.Success = true
+	if result.BackupPath != "" {
+		result.Message = fmt.Sprintf("Backup completed: %s", result.BackupPath)
+	} else {
+		result.Message = "Backup completed successfully"
+	}
 	return result, nil
 }
 

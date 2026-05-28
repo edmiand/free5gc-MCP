@@ -818,12 +818,12 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 					fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
 				}
 				if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
-					result.Details = append(result.Details, "Webconsole was not running or already stopped")
+					result.Warnings = append(result.Warnings, fmt.Sprintf("pkill failed (%v); fuser also failed (%v) — webconsole may still be running or sudo requires NOPASSWD", err, fuserErr2))
 				} else {
 					result.Details = append(result.Details, "Webconsole stopped (via port kill)")
 				}
 			} else {
-				result.Warnings = append(result.Warnings, "Neither 'pkill' nor 'fuser' commands are available to stop webconsole")
+				result.Warnings = append(result.Warnings, fmt.Sprintf("pkill failed (%v) and fuser is not available — webconsole may still be running or sudo requires NOPASSWD", err))
 			}
 		} else {
 			result.Details = append(result.Details, "Webconsole stopped")
@@ -836,7 +836,7 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 			fuserCmd = exec.CommandContext(ctx, fuserPath, "-k", wcPortStr)
 		}
 		if fuserErr2 := fuserCmd.Run(); fuserErr2 != nil {
-			result.Details = append(result.Details, "Webconsole was not running or already stopped")
+			result.Warnings = append(result.Warnings, fmt.Sprintf("fuser failed (%v) — webconsole may still be running or sudo requires NOPASSWD", fuserErr2))
 		} else {
 			result.Details = append(result.Details, "Webconsole stopped (via port kill)")
 		}
@@ -850,9 +850,9 @@ func (c *Free5GCClient) StopFree5GC(ctx context.Context) (*CoreStopResult, error
 	forceKillPath := filepath.Join(c.Free5GCPath, "force_kill.sh")
 	var cmd *exec.Cmd
 	if sudoErr == nil {
-		cmd = exec.CommandContext(ctx, sudoPath, "bash", forceKillPath)
+		cmd = exec.CommandContext(ctx, sudoPath, forceKillPath)
 	} else {
-		cmd = exec.CommandContext(ctx, "bash", forceKillPath)
+		cmd = exec.CommandContext(ctx, forceKillPath)
 	}
 	cmd.Dir = c.Free5GCPath
 

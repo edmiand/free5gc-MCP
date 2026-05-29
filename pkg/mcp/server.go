@@ -394,7 +394,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",
@@ -412,7 +412,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",
@@ -434,7 +434,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The base UE ID (IMSI) of the first subscriber, e.g., imsi-208930000000001",
+						"description": "The base UE ID (IMSI) of the first subscriber, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",
@@ -460,7 +460,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",
@@ -482,7 +482,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001",
+						"description": "The UE ID (IMSI) of the subscriber, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",
@@ -504,7 +504,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 				"properties": map[string]interface{}{
 					"ueId": map[string]string{
 						"type":        "string",
-						"description": "The UE ID (IMSI) of the subscriber to delete, e.g., imsi-208930000000001",
+						"description": "The UE ID (IMSI) of the subscriber to delete, e.g., imsi-208930000000001. The digit part must be exactly 15 digits.",
 					},
 					"servingPlmnId": map[string]string{
 						"type":        "string",

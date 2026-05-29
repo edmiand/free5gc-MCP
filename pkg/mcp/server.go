@@ -420,7 +420,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 					},
 					"subscriberData": map[string]interface{}{
 						"type":        "object",
-						"description": "The subscriber data object containing all subscriber configuration. If not provided, default values will be used with K=8baf473f2f8fd09487cccbd7097c6862, OPC=8e27b6af0e692e750f32667a3b14605d, and default slice/DNN configurations.",
+						"description": "The subscriber data object containing all subscriber configuration. Omit this parameter entirely to use defaults (K=8baf473f2f8fd09487cccbd7097c6862, OPC=8e27b6af0e692e750f32667a3b14605d, default slice/DNN). Do not pass an empty object.",
 					},
 				},
 				"required": []string{"ueId", "servingPlmnId"},
@@ -446,7 +446,7 @@ func (s *Server) handleListTools(req jsonRPCRequest) *jsonRPCResponse {
 					},
 					"subscriberData": map[string]interface{}{
 						"type":        "object",
-						"description": "The subscriber data template for all new subscribers. If not provided, default values will be used.",
+						"description": "The subscriber data template for all new subscribers. Omit this parameter entirely to use defaults. Do not pass an empty object.",
 					},
 				},
 				"required": []string{"ueId", "servingPlmnId", "userNumber"},
@@ -781,8 +781,8 @@ func (s *Server) callSubscriberCreate(id interface{}, args map[string]interface{
 	if servingPlmnId == "" {
 		return s.errorResponse(id, -32602, "missing servingPlmnId parameter", nil)
 	}
-	// Use default subscriber data if not provided
-	if subscriberData == nil {
+	// Use default subscriber data if not provided or empty
+	if len(subscriberData) == 0 {
 		subscriberData = getDefaultSubscriberData(ueId, servingPlmnId)
 	}
 
@@ -828,8 +828,8 @@ func (s *Server) callSubscriberCreateMultiple(id interface{}, args map[string]in
 	if userNumber <= 0 {
 		return s.errorResponse(id, -32602, "userNumber must be a positive integer", nil)
 	}
-	// Use default subscriber data if not provided
-	if subscriberData == nil {
+	// Use default subscriber data if not provided or empty
+	if len(subscriberData) == 0 {
 		subscriberData = getDefaultSubscriberData(ueId, servingPlmnId)
 	}
 

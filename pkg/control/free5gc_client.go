@@ -534,32 +534,18 @@ func (c *Free5GCClient) StartFree5GC(ctx context.Context) (*CoreStartResult, err
 	
 	result.Details = append(result.Details, "Started run.sh in background")
 	
-	// Start webconsole
+	// Start webconsole via double-fork: bash launches it in the background and exits,
+	// so the webconsole is reparented to init and never becomes a zombie of this process.
 	result.Details = append(result.Details, "Starting webconsole...")
 	webconsolePath := filepath.Join(c.Free5GCPath, "webconsole")
 	wcLogFile := filepath.Join(c.Free5GCPath, "mcp_webconsole.log")
 	webconsoleBin := filepath.Join(webconsolePath, "bin", "webconsole")
-	wcLogF, err := os.Create(wcLogFile)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to create webconsole log file: %v", err))
+	wcCmd := exec.Command("bash", "-c", fmt.Sprintf("%s >>%s 2>&1 &", webconsoleBin, wcLogFile))
+	wcCmd.Dir = webconsolePath
+	if err := wcCmd.Run(); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to start webconsole: %v", err))
 	} else {
-		defer wcLogF.Close()
-		wcCmd := exec.Command(webconsoleBin)
-		wcCmd.Dir = webconsolePath
-		wcCmd.Stdout = wcLogF
-		wcCmd.Stderr = wcLogF
-		wcCmd.Stdin = nil
-		
-		if err := wcCmd.Start(); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to start webconsole: %v", err))
-		} else {
-			// Detach the process to avoid zombie if not waited on
-			if err := wcCmd.Process.Release(); err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to release webconsole process: %v", err))
-			} else {
-				result.Details = append(result.Details, "Started webconsole in background")
-			}
-		}
+		result.Details = append(result.Details, "Started webconsole in background")
 	}
 	
 	result.Details = append(result.Details, "Waiting for network functions to initialize...")

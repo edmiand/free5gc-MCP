@@ -627,7 +627,7 @@ func findProcessUsage(lines []string, processName string) NFResourceUsage {
 		usage.CPU = cpu
 		usage.MemMB = rssKB / 1024.0
 		usage.Status = status
-		usage.Running = true
+		usage.Running = status != "zombie"
 		break
 	}
 	return usage
@@ -751,7 +751,7 @@ func findProcessUptime(auxLines []string, processName string) NFUptime {
 
 	result.PID = pid
 	result.Status = status
-	result.Running = true
+	result.Running = status != "zombie"
 	result.StartTime = parseLstart(string(lstartOut))
 	result.Uptime = parseEtime(string(etimeOut))
 	return result
